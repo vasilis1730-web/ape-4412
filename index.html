@@ -3995,6 +3995,21 @@ async function syncPushOne(entry){
  return {updated:true};
 }
 
+/* Έχει το έργο περιεχόμενο που αξίζει να ανέβει;
+   Χωρίς αυτό, κάθε νέα συνεδρία ανέβαζε το κενό «Νέο έργο» που δημιουργεί η
+   εκκίνηση, και η βάση γέμιζε άδεια έργα. Μόλις ένα έργο ανέβει έστω μία
+   φορά συνεχίζει να συγχρονίζεται κανονικά, ακόμη κι αν αδειάσει. */
+function entryHasContent(e){
+ const d=e&&e.data; if(!d) return false;
+ if((d.groups||[]).length) return true;
+ if((d.anath&&d.anath.periods||[]).length) return true;
+ if((d.versions||[]).length || (d.docs||[]).length) return true;
+ const b=blank().project, p=d.project||{};
+ return Object.keys(p).some(k=>{
+  const v=p[k]; return v!==b[k] && v!=='' && v!=null;
+ });
+}
+
 async function syncAll(){
  if(!SB_ON || !sessValid()) return null;
  if(syncState.busy) return null;
@@ -4007,6 +4022,7 @@ async function syncAll(){
    /* Ανεβαίνουν μόνο τα δικά μας έργα: στα ξένα δεν έχουμε δικαίωμα εγγραφής. */
    if(e.remoteId && e.ownerId && e.ownerId!==sbSession.user.id) continue;
    if(e.remoteId && !e.dirty) continue;
+   if(!e.remoteId && !entryHasContent(e)) continue;
    const r = await syncPushOne(e);
    if(r.conflict) conflicts.push(e.name); else pushed++;
   }
