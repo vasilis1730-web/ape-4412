@@ -21,10 +21,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      # Το enablement ενεργοποιεί το Pages αν δεν είναι ήδη ρυθμισμένο,
+      # ώστε να μη χρειάζεται χειροκίνητο βήμα στις ρυθμίσεις του repo.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
+
       - id: deployment
         uses: actions/deploy-pages@v4
