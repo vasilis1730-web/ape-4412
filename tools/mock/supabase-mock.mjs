@@ -9,10 +9,14 @@
    Δοκιμή:    node tools/sync_test.mjs
    ══════════════════════════════════════════════════════════════════ */
 import http from 'node:http';
-const USERS = { 'a@dimos.gr': { pw:'sw123456', id:'user-a' }, 'b@dimos.gr': { pw:'sw123456', id:'user-b' } };
+/* Οι αρχικοί κωδικοί κρατιούνται χωριστά: η δοκιμή πρόσκλησης τους αλλάζει,
+   και χωρίς επαναφορά η επόμενη δοκιμή θα αποτύγχανε χωρίς λόγο. */
+const SEED = { 'a@dimos.gr': { pw:'sw123456', id:'user-a' }, 'b@dimos.gr': { pw:'sw123456', id:'user-b' } };
+let USERS = structuredClone(SEED);
 let rows = [];  // {id,owner_id,title,data,revision}
 let seq = 0;
 const LOG = [];
+const PWSET = [];
 
 const send = (res, code, obj) => {
   res.writeHead(code, {'Content-Type':'application/json','Access-Control-Allow-Origin':'*',
@@ -46,6 +50,19 @@ http.createServer((req,res)=>{
     }
     if(u.pathname==='/auth/v1/logout') return send(res,204);
 
+    // ορισμός/αλλαγή κωδικού από συνδεδεμένο χρήστη (πρόσκληση ή επαναφορά)
+    if(u.pathname==='/auth/v1/user' && req.method==='PUT'){
+      const tok=(req.headers.authorization||'').replace('Bearer ','');
+      if(!tok) return send(res,401,{msg:'invalid claim: missing sub claim'});
+      if(tok==='tok-expired') return send(res,401,{msg:'invalid JWT: token is expired'});
+      const b=JSON.parse(body||'{}');
+      const id=tok.replace('tok-','');
+      const email=Object.keys(USERS).find(k=>USERS[k].id===id);
+      if(b.password && email) USERS[email].pw=b.password;
+      PWSET.push({id, pw:b.password});
+      return send(res,200,{id, email});
+    }
+
     const auth=(req.headers.authorization||'').replace('Bearer ','');
     const me=auth.replace('tok-','');
 
@@ -70,7 +87,8 @@ http.createServer((req,res)=>{
         return send(res,200,hit.map(r=>({...r, updated_at:new Date().toISOString()})));
       }
     }
-    if(u.pathname==='/__reset'){ rows=[]; seq=0; LOG.length=0; return send(res,200,{ok:true}); }
+    if(u.pathname==='/__reset'){ rows=[]; seq=0; LOG.length=0; PWSET.length=0; USERS=structuredClone(SEED); return send(res,200,{ok:true}); }
+    if(u.pathname==='/__pwset') return send(res,200,PWSET);
     if(u.pathname==='/__log') return send(res,200,LOG);
     if(u.pathname==='/__seed'){ const b=JSON.parse(body); rows.push(b); return send(res,200,{ok:true}); }
     send(res,404,{message:'not found'});

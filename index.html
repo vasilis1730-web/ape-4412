@@ -4065,9 +4065,84 @@ function loginScreen(msg, kind){
   </div></div>`;
 }
 
-let offlineMode=false;
+/* ── ορισμός κωδικού από πρόσκληση ή επαναφορά ──────────────────────
+   Το «Invite user» του Supabase ΔΕΝ δημιουργεί κωδικό: στέλνει σύνδεσμο που
+   περιέχει έτοιμη συνεδρία στο fragment της διεύθυνσης. Ο χρήστης φτάνει
+   συνδεδεμένος αλλά χωρίς κωδικό — και αν η εφαρμογή δεν διαβάσει το
+   fragment, δεν βλέπει τίποτα και δεν μπορεί να ξαναμπεί ποτέ.
+   Το ίδιο ισχύει και για τον σύνδεσμο επαναφοράς κωδικού. */
+function setPassScreen(msg, kind, mode){
+ const t = mode==='invite'
+   ? 'Καλώς ήρθατε. Ορίστε τον κωδικό σας.'
+   : 'Ορίστε νέο κωδικό.';
+ return `<div style="position:fixed;inset:0;background:var(--rail);display:grid;place-items:center;z-index:100;padding:24px">
+  <div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:28px 30px;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+   <div style="font-size:22px;font-weight:800;letter-spacing:.02em">ΑΠΕ</div>
+   <div style="font-size:12.5px;color:var(--ink3);margin:3px 0 6px">Ανακεφαλαιωτικοί Πίνακες Εργασιών · Ν. 4412/2016</div>
+   <p style="font-size:13.5px;margin:0 0 18px;color:var(--ink2)">${t}</p>
+   ${msg?`<div class="note${kind==='bad'?' b':(kind==='ok'?' g':'')}" style="margin:0 0 16px">${msg}</div>`:''}
+   <form onsubmit="doSetPassword(event)">
+    <label class="f" style="margin-bottom:12px"><span>Νέος κωδικός</span>
+     <input type="password" id="pw1" autocomplete="new-password" required minlength="8">
+     <span class="hint">Τουλάχιστον 8 χαρακτήρες.</span></label>
+    <label class="f" style="margin-bottom:18px"><span>Επανάληψη κωδικού</span>
+     <input type="password" id="pw2" autocomplete="new-password" required minlength="8"></label>
+    <button class="btn c1" type="submit" style="width:100%;justify-content:center" id="pwBtn">Αποθήκευση κωδικού</button>
+   </form>
+  </div></div>`;
+}
+
+let offlineMode=false, pendingMode=null;
 function showLogin(msg,kind){ document.getElementById('login').innerHTML=loginScreen(msg,kind); }
 function hideLogin(){ document.getElementById('login').innerHTML=''; }
+function showSetPass(msg,kind){ document.getElementById('login').innerHTML=setPassScreen(msg,kind,pendingMode); }
+
+/* Διαβάζει τη συνεδρία που έρχεται στο fragment του συνδέσμου και την
+   καθαρίζει από τη διεύθυνση, ώστε να μη μείνει το token στο ιστορικό. */
+function consumeAuthHash(){
+ const h=(location.hash||'').replace(/^#/,'');
+ if(!h) return null;
+ const q=new URLSearchParams(h);
+ const err=q.get('error_description')||q.get('error');
+ const tok=q.get('access_token'), typ=q.get('type');
+ if(!err && !tok) return null;
+ history.replaceState(null,'',location.pathname+location.search);
+ if(err) return {error:decodeURIComponent(err.replace(/\+/g,' '))};
+ sessSave({access_token:tok, refresh_token:q.get('refresh_token')||'',
+   expires_at:Math.floor(Date.now()/1000)+Number(q.get('expires_in')||3600), user:null});
+ return {type:typ||'recovery'};
+}
+
+async function doSetPassword(ev){
+ ev.preventDefault();
+ const b=document.getElementById('pwBtn');
+ const p1=document.getElementById('pw1').value, p2=document.getElementById('pw2').value;
+ if(p1!==p2){ showSetPass('Οι δύο κωδικοί δεν ταιριάζουν.','bad'); return; }
+ if(p1.length<8){ showSetPass('Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες.','bad'); return; }
+ b.disabled=true; b.textContent='Αποθήκευση…';
+ try{
+  const u=await sbCall('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:p1})});
+  if(u&&u.id) sessSave(Object.assign({},sbSession,{user:u}));
+  pendingMode=null; hideLogin(); render();
+  try{ const r=await syncAll();
+   flashMsg={k:'g',t:'Ο κωδικός ορίστηκε.',
+     d:'Από εδώ και πέρα συνδέεστε με το ηλεκτρονικό σας ταχυδρομείο και αυτόν τον κωδικό.'
+       +(r?` Λήφθηκαν ${r.pull.total} έργα από τη βάση.`:'')};
+  }catch(e){ flashMsg={k:'g',t:'Ο κωδικός ορίστηκε.',d:'Ο συγχρονισμός θα γίνει μόλις υπάρξει σύνδεση.'}; }
+  render();
+ }catch(e){
+  const raw=e.message||'';
+  b.disabled=false; b.textContent='Αποθήκευση κωδικού';
+  showSetPass(/expired|invalid|JWT/i.test(raw)
+    ? 'Ο σύνδεσμος έληξε. Ζητήστε νέον με το «Ξέχασα τον κωδικό».'
+    : /should be different|same as/i.test(raw)
+      ? 'Ο νέος κωδικός πρέπει να διαφέρει από τον προηγούμενο.'
+      : 'Δεν αποθηκεύτηκε: '+E(raw), 'bad');
+ }
+}
+
+/* Αλλαγή κωδικού από συνδεδεμένο χρήστη. */
+function changePassword(){ pendingMode='change'; showSetPass(); }
 
 async function doLogin(ev){
  ev.preventDefault();
@@ -4135,6 +4210,7 @@ function renderSyncBar(){
    : '✓ Συγχρονισμένο';
  el.innerHTML=`<div class="mtag" style="margin-bottom:5px;overflow:hidden;text-overflow:ellipsis">${E(who)}</div>
   <button onclick="manualSync()" style="width:100%;margin-bottom:4px" ${syncState.busy?'disabled':''}>${st}</button>
+  <button onclick="changePassword()" style="width:100%;margin-bottom:4px">Αλλαγή κωδικού</button>
   <button onclick="doLogout()" style="width:100%">Αποσύνδεση</button>`;
 }
 async function manualSync(){
@@ -4155,6 +4231,13 @@ async function manualSync(){
 /* ── εκκίνηση ─────────────────────────────────────────────────────── */
 async function bootAuth(){
  if(!SB_ON){ renderSyncBar(); return; }
+
+ /* Πρώτα ο σύνδεσμος πρόσκλησης ή επαναφοράς, αν υπάρχει. */
+ const cb=consumeAuthHash();
+ if(cb && cb.error){ showLogin('Ο σύνδεσμος δεν ισχύει πια: '+E(cb.error)
+   +'<br>Ζητήστε νέον με το «Ξέχασα τον κωδικό».','bad'); return; }
+ if(cb){ pendingMode=cb.type; renderSyncBar(); showSetPass(); return; }
+
  sessLoad();
  if(sessValid() || (sbSession && await sbRefresh())){
   renderSyncBar();
