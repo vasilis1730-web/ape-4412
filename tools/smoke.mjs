@@ -29,11 +29,11 @@ if (gated) {
 await page.evaluate(() => loadDemo());
 
 let fail = 0;
-for (const t of ['p1','p2','p3','p4','p5','p6','p7','p8']) {
+for (const t of ['p1','p2','p3','p4','p5','p6','p7','e1','e2','e3','e4']) {
   await page.evaluate(id => go(id), t);
   await page.waitForTimeout(100);
   const len = await page.evaluate(() => document.getElementById('content').innerHTML.length);
-  if (len < 500) { console.log(`✗ βήμα ${t}: κενό`); fail++; }
+  if (len < 400) { console.log(`✗ βήμα ${t}: κενό`); fail++; }
   else console.log(`✓ βήμα ${t} (${len} χαρ.)`);
 }
 

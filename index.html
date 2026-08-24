@@ -29,6 +29,12 @@ button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit
 .brand b{display:block;color:#fff;font-size:16px;letter-spacing:.02em}
 .brand span{display:block;color:var(--railText);font-size:11px;margin-top:3px;line-height:1.4}
 .steps{padding:10px 8px;flex:1}
+.modes{display:flex;gap:4px;margin:0 2px 10px;background:rgba(0,0,0,.28);border-radius:8px;padding:4px}
+.modes button{flex:1;background:transparent;border:0;border-radius:6px;padding:7px 4px;cursor:pointer;
+  color:var(--railText);font-size:12px;font-weight:700;letter-spacing:.01em;line-height:1.2}
+.modes button span{display:block;font-size:9.5px;font-weight:400;opacity:.7;margin-top:1px}
+.modes button:hover{color:#E7ECF2}
+.modes button.on{background:rgba(255,255,255,.16);color:#fff}
 .step{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;margin-bottom:3px;
   background:transparent;border:0;border-radius:7px;cursor:pointer;text-align:left;color:var(--railText);
   transition:background .12s,color .12s}
@@ -890,7 +896,13 @@ function blank(){return{
  anath:{ekkY:'',ekkQ:0,sigma1:0.07,periods:[]},
  docs:[],          /* μητρώο εγγράφων που εισήχθησαν */
  versions:[],      /* καταχωρισμένες εκδόσεις Α.Π.Ε. */
- checks:{}         /* χειροκίνητες επιβεβαιώσεις φύλλου ελέγχου */
+ checks:{},        /* χειροκίνητες επιβεβαιώσεις φύλλου ελέγχου */
+ audit:{           /* λειτουργία ελέγχου Α.Π.Ε. τρίτου */
+  meta:{syntaktis:'',arYpovolis:'',imYpovolis:'',apeNo:1,
+   elegktis:'',elegktisEid:'Πολιτικός Μηχανικός Π.Ε.',imElegxou:'',
+   symperasma:'auto',paratiriseis:''},
+  names:[],findings:[],summary:null,data:null
+ }
 };}
 
 /* ════════════════ ΒΙΒΛΙΟΘΗΚΗ ΕΡΓΩΝ ════════════════ */
@@ -959,6 +971,10 @@ function normalize(d){
  o.docs=Array.isArray(d.docs)?d.docs:[];
  o.versions=Array.isArray(d.versions)?d.versions:[];
  o.checks=d.checks&&typeof d.checks==='object'?d.checks:{};
+ o.audit=Object.assign({},b.audit,d.audit||{});
+ o.audit.meta=Object.assign({},b.audit.meta,(d.audit||{}).meta||{});
+ o.audit.names=Array.isArray(o.audit.names)?o.audit.names:[];
+ o.audit.findings=Array.isArray(o.audit.findings)?o.audit.findings:[];
  o.groups=Array.isArray(o.groups)?o.groups:[];
  o.groups.forEach(g=>{
    g.id=safeId(g.id);
@@ -1163,7 +1179,11 @@ function allRevCodes(){
 }
 </script>
 <script>
-/* ════════════════ ΠΛΟΗΓΗΣΗ ════════════════ */
+/* ════════════════ ΠΛΟΗΓΗΣΗ ════════════════
+   Δύο ισότιμες λειτουργίες: σύνταξη δικού μας Α.Π.Ε. (p1–p7) και
+   έλεγχος Α.Π.Ε. που συνέταξε τρίτος (e1–e4). Η ενεργή λειτουργία
+   προκύπτει από το πρόθεμα της καρτέλας, ώστε να μη χρειάζεται
+   ξεχωριστή κατάσταση που θα μπορούσε να αποσυγχρονιστεί. */
 const TABS=[
  {id:'p1',n:'1',c:'--s1',t:'Έργο',s:'Στοιχεία & πρόσωπα'},
  {id:'p2',n:'2',c:'--s2',t:'Προϋπολογισμός',s:'Ομάδες & άρθρα μελέτης'},
@@ -1172,14 +1192,33 @@ const TABS=[
  {id:'p5',n:'5',c:'--s6',t:'Αναθεώρηση',s:'Περίοδοι & συντελεστές'},
  {id:'p6',n:'6',c:'--s7',t:'Έλεγχος νομιμότητας',s:'Όρια άρθρου 156'},
  {id:'p7',n:'7',c:'--s8',t:'Έγγραφα',s:'ΑΠΕ · εκθέσεις · εισηγήσεις'},
- {id:'p8',n:'🔍',c:'--s4',t:'Έλεγχος ΑΠΕ τρίτου',s:'Επαλήθευση έτοιμου πίνακα'},
 ];
+const TABS_E=[
+ {id:'e1',n:'1',c:'--s1',t:'Στοιχεία ελέγχου',s:'Ποιος υπέβαλε · ποιος ελέγχει'},
+ {id:'e2',n:'2',c:'--s3',t:'Ανάγνωση Α.Π.Ε.',s:'Πίνακας & φύλλα αναθεώρησης'},
+ {id:'e3',n:'3',c:'--s7',t:'Πόρισμα ελέγχου',s:'Ευρήματα & όρια βήμα-βήμα'},
+ {id:'e4',n:'4',c:'--s8',t:'Έγγραφα ελέγχου',s:'Έκθεση · εισήγηση'},
+];
+const isAudit=()=>tab.charAt(0)==='e';
+let lastComposeTab='p1', lastAuditTab='e1';
 function renderNav(){
- $('steps').innerHTML=TABS.map(t=>`<button class="step ${tab===t.id?'on':''}" onclick="go('${t.id}')">
+ const list=isAudit()?TABS_E:TABS;
+ $('steps').innerHTML=
+  `<div class="modes">
+    <button class="${isAudit()?'':'on'}" onclick="setMode('compose')">Σύνταξη<span>δικού μας Α.Π.Ε.</span></button>
+    <button class="${isAudit()?'on':''}" onclick="setMode('audit')">Έλεγχος<span>Α.Π.Ε. τρίτου</span></button>
+   </div>`+
+  list.map(t=>`<button class="step ${tab===t.id?'on':''}" onclick="go('${t.id}')">
    <span class="dot" style="background:var(${t.c})">${t.n}</span>
    <span class="lbl">${t.t}<span class="sub">${t.s}</span></span></button>`).join('');
 }
-function go(id){tab=id;render();document.querySelector('.content').scrollTop=0;}
+function setMode(m){ go(m==='audit'?lastAuditTab:lastComposeTab); }
+function go(id){
+ if(id==='p8')id='e2';                     /* παλιός σύνδεσμος του ελέγχου */
+ tab=id;
+ if(isAudit())lastAuditTab=tab; else lastComposeTab=tab;
+ render();document.querySelector('.content').scrollTop=0;
+}
 
 /* ════════════════ ΜΕΤΡΗΤΕΣ ════════════════ */
 function meter(name,val,limit,unit,tag){
@@ -1192,6 +1231,7 @@ function meter(name,val,limit,unit,tag){
   <div class="mtag">${tag}</div></div>`;
 }
 function renderMeters(){
+ if(isAudit()){ renderAuditMeters(); return; }
  const c=calc();
  const m=[
   meter('Απρόβλεπτα σε χρήση',c.aprPct,100,'%','όριο 100% του κονδυλίου'),
@@ -1205,6 +1245,28 @@ function renderMeters(){
   :`<div class="meter" style="min-width:210px;flex:0 0 auto"><div class="mh"><span class="mn">Τεχνικό Συμβούλιο</span></div>
     <span class="st ok"><b></b>ΔΕΝ ΠΡΟΚΥΠΤΕΙ ΑΝΑΓΚΗ</span></div>`;
  $('meters').innerHTML=m+ts;
+}
+/* Στη λειτουργία ελέγχου οι μετρητές δείχνουν τα όρια όπως τα υπολόγισε
+   ανεξάρτητα η εφαρμογή από τον ελεγχόμενο Πίνακα — όχι από το δικό μας έργο. */
+function renderAuditMeters(){
+ const s=S.audit.summary;
+ if(!s){ $('meters').innerHTML=`<div class="meter" style="flex:0 0 auto;min-width:300px"><div class="mh">
+   <span class="mn">Λειτουργία ελέγχου</span></div>
+   <span class="st na"><b></b>ΔΕΝ ΕΧΕΙ ΔΙΑΒΑΣΤΕΙ Α.Π.Ε.</span></div>`; return; }
+ const aprPct=(s.aprC&&s.aprC>0)?Math.min(s.aprNeed/s.aprC*100,999):0;
+ const m=[
+  meter('Απρόβλεπτα σε χρήση',aprPct,100,'%','όριο 100% του κονδυλίου'),
+  meter('«Επί έλασσον» / ομάδα',s.maxPct,20,'%','όριο 20% — άρθρο 156 §3γε΄'),
+  meter('Μεταφορές μεταξύ ομάδων',s.pct10,10,'%','όριο 10% — άρθρο 156 §3γε΄'),
+  meter('Συμβατική μεταβολή',Math.abs(s.symPct||0),15,'%','όριο 15% — άρθρο 156 §3α΄'),
+ ].join('');
+ const v=audVerdict();
+ const pill=v==='return'
+  ?'<span class="st bad"><b></b>ΕΠΙΣΤΡΟΦΗ ΓΙΑ ΔΙΟΡΘΩΣΗ</span>'
+  :v==='obs'?'<span class="st warn"><b></b>ΕΓΚΡΙΣΗ ΜΕ ΠΑΡΑΤΗΡΗΣΕΙΣ</span>'
+  :'<span class="st ok"><b></b>ΠΡΟΤΕΙΝΕΤΑΙ ΕΓΚΡΙΣΗ</span>';
+ $('meters').innerHTML=m+`<div class="meter" style="min-width:210px;flex:0 0 auto">
+  <div class="mh"><span class="mn">Πόρισμα</span></div>${pill}</div>`;
 }
 
 
@@ -1255,6 +1317,16 @@ function dropFiles(ev,el,inputId){
 function renderTop(){
  const p=S.project,c=calc();
  $('ttl').textContent=p.ergo||'— δεν έχει οριστεί τίτλος έργου —';
+ if(isAudit()){
+  const A=S.audit, nE=A.findings.filter(x=>x.sev==='err').length,
+        nW=A.findings.filter(x=>x.sev==='warn').length;
+  $('sub').textContent=[p.dimos,A.meta.syntaktis?('Συντάκτης: '+A.meta.syntaktis):'',
+    A.data?(A.data.articles.length+' άρθρα υπό έλεγχο'):''].filter(Boolean).join('  ·  ');
+  $('topActions').innerHTML=A.findings.length
+   ?`<span class="st ${nE?'bad':(nW?'warn':'ok')}"><b></b>Έλεγχος ${A.meta.apeNo||1}ου Α.Π.Ε. · ${nE} σφάλματα · ${nW} προσοχή</span>`
+   :`<span class="st na"><b></b>Έλεγχος ${A.meta.apeNo||1}ου Α.Π.Ε.</span>`;
+  return;
+ }
  $('sub').textContent=[p.dimos,p.anadoxos?('Ανάδοχος: '+p.anadoxos):'',
    S.groups.length?(S.groups.length+' ομάδες · '+S.groups.reduce((a,g)=>a+g.items.length,0)+' άρθρα'):''
  ].filter(Boolean).join('  ·  ');
@@ -1265,7 +1337,8 @@ function renderTop(){
 function render(){renderNav();renderProjBar();renderTop();renderMeters();
  if(typeof renderSyncBar==='function') renderSyncBar();
  $('content').innerHTML=(typeof flashHTML==='function'?flashHTML():'')+
-  ({p1:vProject,p2:vBudget,p3:vContract,p4:vApe,p5:vAnath,p6:vCheck,p7:vDocs,p8:vAudit}[tab])();}
+  ({p1:vProject,p2:vBudget,p3:vContract,p4:vApe,p5:vAnath,p6:vCheck,p7:vDocs,
+    e1:vAud1,e2:vAud2,e3:vAud3,e4:vAud4}[tab]||vProject)();}
 function soft(){renderTop();renderMeters();
  if(typeof markDirty==='function') markDirty();
  const sn=$('stabNote');
@@ -2185,7 +2258,10 @@ function docFyl(c,D){
 /* ── εξαγωγή ── */
 function exportDoc(){
  const body=$('docv').innerHTML;
- const name=(DOCS.find(d=>d.id===curDoc)||{}).t||'εγγραφο';
+ /* Το κουμπί εξυπηρετεί και τα έγγραφα της λειτουργίας ελέγχου (ADOCS). */
+ const name=(isAudit()
+   ?(typeof ADOCS!=='undefined'&&(ADOCS.find(d=>d.id===curAudDoc)||{}).t)
+   :(DOCS.find(d=>d.id===curDoc)||{}).t)||'εγγραφο';
  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
  <head><meta charset="utf-8"><title>${E(name)}</title>
  <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
@@ -3629,11 +3705,14 @@ function solveArticle(N){
  const v=N.map(x=>x.v);
  /* Στον πίνακα η ποσότητα τυπώνεται πάντοτε πριν από την τιμή μονάδας,
     οπότε η θέση ξεχωρίζει ποιο μέγεθος είναι ποιο. */
+ /* Η δαπάνη τυπώνεται πάντοτε ΜΕΤΑ την ποσότητα και την τιμή της στήλης της,
+    οπότε δεκτές είναι μόνο τριάδες με σειρά i < j < k. Χωρίς τον περιορισμό,
+    τυχαίες συμπτώσεις (π.χ. 10 × 10 = 100 από άσχετες θέσεις) παρήγαγαν
+    ανύπαρκτα ζεύγη και αλλοίωναν τις ποσότητες του ελέγχου. */
  const trip=[];
  for(let i=0;i<v.length;i++) for(let j=i+1;j<v.length;j++){
   if(!v[j]||!v[i])continue;
-  for(let k=0;k<v.length;k++){
-   if(k===i||k===j)continue;
+  for(let k=j+1;k<v.length;k++){
    if(v[k]>0&&near(R2(v[i]*v[j]),v[k])) trip.push({q:v[i],qi:i,p:v[j],c:v[k],ki:k});
   }
  }
@@ -3775,7 +3854,13 @@ function auditApe(D){
  if(zeroed) add('warn','Νομιμότητα','Μηδενισμός άρθρων τιμολογίου','—',zeroed+' άρθρα',
   'Τίθεται υπόψη του Τεχνικού Συμβουλίου ως ζήτημα «βασικού σχεδίου».');
 
- return{findings:f,summary:{plus,minus,eli,transfer,maxPct,over,pct10,aprNeed,worksC,worksA,gres}};
+ /* Τα δηλωθέντα μεγέθη περνούν στη σύνοψη, ώστε οι μετρητές και τα έγγραφα
+    ελέγχου να τα δείχνουν χωρίς να ξαναδιαβάζουν το πρωτογενές κείμενο. */
+ const symPct=(fin.symC&&fin.symA!=null)?R2((fin.symA-fin.symC)/fin.symC*100):0;
+ return{findings:f,summary:{plus,minus,eli,transfer,maxPct,over,pct10,aprNeed,worksC,worksA,gres,
+  symC:fin.symC??null,symA:fin.symA??null,symPct,aprC:fin.aprC??null,aprA:fin.aprA??null,
+  netC:fin.netC??null,netA:fin.netA??null,totC:fin.totC??null,totA:fin.totA??null,
+  geoeRate:fin.geoeRate??null,fpaRate:fin.fpaRate??null}};
 }
 
 /* ── αναθεώρηση ── */
@@ -3826,42 +3911,69 @@ function auditRevision(txt,name){
  return f;
 }
 
-/* ════════════════ ΔΙΕΠΑΦΗ ΕΛΕΓΧΟΥ ════════════════ */
-let auditData=null, auditFind=[], auditSum=null, auditNames=[];
-
+/* ════════════════ ΔΙΕΠΑΦΗ ΕΛΕΓΧΟΥ ════════════════
+   Η κατάσταση του ελέγχου ζει στο S.audit: αποθηκεύεται με το έργο και
+   συγχρονίζεται όπως όλα τα υπόλοιπα, ώστε ο έλεγχος να συνεχίζεται
+   από άλλον υπολογιστή ή άλλη μέρα χωρίς να ξαναφορτωθούν τα αρχεία. */
 async function loadAuditFile(ev){
  const files=[...(ev.target.files||[])]; ev.target.value='';
  if(!files.length)return;
  flashMsg={k:'info',t:'Ανάγνωση '+files.length+' αρχείων…',d:''}; render();
+ const A=S.audit;
  try{
   for(const f of files){
    const txt=await readAnyText(f);
    const isRev=/ΑΝΑΘΕΩΡΗΣ|Αναθεώρησ/i.test(txt)&&!/Επί πλέον|Επί έλαττον/i.test(txt);
    if(isRev){
-    auditFind=auditFind.concat(auditRevision(txt,f.name).map(x=>({...x,src:f.name})));
-    auditNames.push(f.name+' — φύλλο αναθεώρησης');
+    A.findings=A.findings.concat(auditRevision(txt,f.name).map(x=>({...x,src:f.name})));
+    A.names.push(f.name+' — φύλλο αναθεώρησης');
    }else{
     const D=parseApeDoc(txt);
-    if(!D.articles.length){ auditFind.push({sev:'warn',area:'Ανάγνωση',what:'Δεν αναγνωρίστηκαν άρθρα στο «'+f.name+'»',
+    if(!D.articles.length){ A.findings.push({sev:'warn',area:'Ανάγνωση',what:'Δεν αναγνωρίστηκαν άρθρα στο «'+f.name+'»',
       decl:'—',calc:'—',note:'Ελέγξτε ότι το αρχείο είναι ο Πίνακας και όχι σαρωμένη εικόνα.',src:f.name}); continue; }
-    auditData=D; auditNames.push(f.name+' — Ανακεφαλαιωτικός Πίνακας ('+D.articles.length+' άρθρα)');
-    const A=auditApe(D);
-    auditFind=A.findings.map(x=>({...x,src:f.name})).concat(auditFind);
-    auditSum=A.summary;
+    /* Νέος Πίνακας αντικαθιστά τα ευρήματα του προηγούμενου·
+       όσα προήλθαν από φύλλα αναθεώρησης ή αποτυχίες ανάγνωσης μένουν. */
+    A.data=D; A.names.push(f.name+' — Ανακεφαλαιωτικός Πίνακας ('+D.articles.length+' άρθρα)');
+    const R=auditApe(D);
+    A.findings=R.findings.map(x=>({...x,src:f.name}))
+      .concat(A.findings.filter(x=>x.area==='Αναθεώρηση'||x.area==='Ανάγνωση'));
+    A.summary=R.summary;
    }
   }
-  flashMsg=null; tab='p8'; render();
+  flashMsg=null; libSave(); go('e3');
  }catch(e){
   if(e&&e.declined){ flashMsg=null; render(); return; }
   flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση.',d:e.message||''}; render();
  }
 }
-function clearAudit(){ auditData=null; auditFind=[]; auditSum=null; auditNames=[]; render(); }
+function clearAudit(){
+ if(!confirm('Θα διαγραφούν τα ευρήματα και τα διαβασμένα αρχεία του ελέγχου. Τα στοιχεία του βήματος 1 μένουν.\n\nΣυνέχεια;'))return;
+ Object.assign(S.audit,{names:[],findings:[],summary:null,data:null});
+ libSave(); render();
+}
+
+/* Το πόρισμα: αυτόματο από τα ευρήματα, με δυνατότητα χειροκίνητης κρίσης. */
+function audVerdict(){
+ const A=S.audit, m=A.meta.symperasma||'auto';
+ if(m!=='auto')return m;
+ const nE=A.findings.filter(x=>x.sev==='err').length;
+ const nW=A.findings.filter(x=>x.sev==='warn').length;
+ return nE?'return':(nW?'obs':'approve');
+}
+const AUD_VERDICT={
+ approve:{t:'ΠΡΟΤΕΙΝΕΤΑΙ ΕΓΚΡΙΣΗ',cls:'ok',
+  d:'Δεν εντοπίστηκαν αριθμητικά σφάλματα ούτε υπερβάσεις ορίων.'},
+ obs:{t:'ΕΓΚΡΙΣΗ ΜΕ ΠΑΡΑΤΗΡΗΣΕΙΣ',cls:'warn',
+  d:'Δεν εντοπίστηκαν σφάλματα, υπάρχουν όμως σημεία που χρειάζονται τεκμηρίωση ή προσοχή.'},
+ return:{t:'ΕΠΙΣΤΡΟΦΗ ΓΙΑ ΔΙΟΡΘΩΣΗ',cls:'bad',
+  d:'Εντοπίστηκαν σφάλματα. Ο Πίνακας δεν πρέπει να προωθηθεί για έγκριση χωρίς διόρθωση και επανυποβολή.'},
+};
 
 /* Μεταφορά των ελεγμένων στοιχείων στο έργο, ώστε να συνταχθούν τα έγγραφα. */
 function adoptAudit(){
+ const auditData=S.audit.data;
  if(!auditData)return;
- if(!confirm('Τα άρθρα και τα ποσοστά του ελεγμένου Πίνακα θα αντικαταστήσουν τα δεδομένα του τρέχοντος έργου.\n\nΣυνέχεια;'))return;
+ if(!confirm('Τα άρθρα και τα ποσοστά του ελεγμένου Πίνακα θα αντικαταστήσουν τα δεδομένα του τρέχοντος έργου στη λειτουργία σύνταξης.\n\nΣυνέχεια;'))return;
  const D=auditData, keep=S.project;
  S.groups=D.groups.map((g,i)=>({id:uid(),name:g.name||('Ομάδα '+(i+1)),discount:g.discount||0,
   items:g.items.map(a=>({id:uid(),at:String(a.at),kodikos:'',perigrafi:a.perigrafi||'',kodAnath:'',
@@ -3875,73 +3987,281 @@ function adoptAudit(){
   if(w>0) keep.apr=R2(D.fin.aprC/w*100);
  }
  const c=calc();
- flashMsg={k:'g',t:'Τα στοιχεία του ελεγμένου Πίνακα υιοθετήθηκαν.',
-  d:'Η εφαρμογή υπολογίζει τώρα γενικό σύνολο '+F(c.totApe)+' €. Μπορείτε να προχωρήσετε στα έγγραφα του βήματος 8.'};
- tab='p4'; libSave(); render();
+ flashMsg={k:'g',t:'Τα στοιχεία του ελεγμένου Πίνακα υιοθετήθηκαν στη λειτουργία σύνταξης.',
+  d:'Η εφαρμογή υπολογίζει τώρα γενικό σύνολο '+F(c.totApe)+' €. Μπορείτε να συντάξετε όλα τα έγγραφα από το βήμα 7 της σύνταξης.'};
+ libSave(); go('p4');
 }
 
-function vAudit(){
- const sev=x=>x==='err'?'<span class="st bad"><b></b>ΣΦΑΛΜΑ</span>'
-   :x==='warn'?'<span class="st warn"><b></b>ΠΡΟΣΟΧΗ</span>':'<span class="st ok"><b></b>ΕΝΤΑΞΕΙ</span>';
- const nErr=auditFind.filter(x=>x.sev==='err').length;
- const nWarn=auditFind.filter(x=>x.sev==='warn').length;
- const nOk=auditFind.filter(x=>x.sev==='ok').length;
- const zone=`<div class="card"><h3><span class="pill" style="background:var(--s4)">🔍</span>Έλεγχος έτοιμου Α.Π.Ε.</h3><div class="cb">
-  <p class="hint" style="margin:0 0 12px">Φορτώστε τον Ανακεφαλαιωτικό Πίνακα που συνέταξε τρίτος, μαζί με τα φύλλα αναθεώρησης.
-   Η εφαρμογή ξαναϋπολογίζει κάθε γραμμή, κάθε άθροισμα και κάθε νόμιμο όριο ανεξάρτητα, και συγκρίνει με τα δηλωθέντα.</p>
-  ${dropZone('audf','Σύρετε εδώ τον Α.Π.Ε. και τα φύλλα αναθεώρησης','PDF, κείμενο ή φωτογραφία — μπορείτε να επιλέξετε πολλά αρχεία μαζί')}
-  ${auditNames.length?`<div class="note g" style="margin-top:12px"><b>Αναγνώστηκαν:</b><br>${auditNames.map(E).join('<br>')}</div>`:''}
-  ${auditFind.length?`<div class="row" style="margin-top:12px">
-    <button class="btn c7" onclick="adoptAudit()" ${auditData?'':'disabled'}>✓ Υιοθέτηση στοιχείων &amp; σύνταξη εγγράφων</button>
-    <button class="btn gh" onclick="exportAudit()">⬇ Λήψη πορίσματος</button>
-    <button class="btn gh" onclick="clearAudit()">Καθαρισμός</button></div>`:''}
+/* ── τα πέντε βήματα του ελέγχου, με εξήγηση της μεθόδου του καθενός ── */
+const AUD_STEPS=[
+ {area:'Ανάγνωση',t:'Ανάγνωση αρχείων',
+  d:'Προβλήματα κατά την ανάγνωση των αρχείων — δεν αφορούν την ορθότητα του Πίνακα.'},
+ {area:'Άρθρα',t:'Βήμα 1 — Αριθμητική άρθρων',
+  d:'Για κάθε άρθρο επαληθεύεται ότι ποσότητα × τιμή μονάδας = δαπάνη, τόσο στη στήλη της σύμβασης όσο και στη στήλη του Α.Π.Ε.'},
+ {area:'Ομάδες',t:'Βήμα 2 — Αθροίσματα ομάδων & εκπτώσεις',
+  d:'Το άθροισμα κάθε ομάδας επανυπολογίζεται από τις γραμμές της και το ποσό της έκπτωσης από το ποσοστό της.'},
+ {area:'Οικονομικά',t:'Βήμα 3 — Οικονομική ανακεφαλαίωση',
+  d:'Η ανακεφαλαίωση ξαναχτίζεται από κάτω προς τα πάνω: εργασίες → Γ.Ε. & Ο.Ε. → απρόβλεπτα → σύνολο χωρίς Φ.Π.Α. → Φ.Π.Α. → γενικό σύνολο.'},
+ {area:'Νομιμότητα',t:'Βήμα 4 — Όρια του άρθρου 156',
+  d:'Τα όρια υπολογίζονται ανεξάρτητα από τις μεταβολές των άρθρων: 20% «επί έλασσον» ανά ομάδα, 10% μεταφορές μεταξύ ομάδων, 15% συμβατική μεταβολή, επάρκεια του κονδυλίου απροβλέπτων, ανάγκη γνώμης Τεχνικού Συμβουλίου.'},
+ {area:'Αναθεώρηση',t:'Βήμα 5 — Αναθεώρηση τιμών (άρθρο 153)',
+  d:'Στα φύλλα αναθεώρησης ελέγχονται ο σταθερός συντελεστής σ = σ₁ + 0,01·ν (με ανώτατη τιμή 0,20) και ότι η δαπάνη πολλαπλασιάστηκε με (1 − σ) και όχι με σ.'},
+];
+function audGroups(){
+ const A=S.audit,out=[];
+ AUD_STEPS.forEach(st=>{ const rows=A.findings.filter(x=>x.area===st.area);
+  if(rows.length)out.push({t:st.t,d:st.d,rows}); });
+ const known=new Set(AUD_STEPS.map(x=>x.area));
+ const rest=A.findings.filter(x=>!known.has(x.area));
+ if(rest.length)out.push({t:'Λοιπά ευρήματα',d:'',rows:rest});
+ return out;
+}
+const audSev=x=>x==='err'?'<span class="st bad"><b></b>ΣΦΑΛΜΑ</span>'
+  :x==='warn'?'<span class="st warn"><b></b>ΠΡΟΣΟΧΗ</span>':'<span class="st ok"><b></b>ΕΝΤΑΞΕΙ</span>';
+
+/* ── βήμα 1: στοιχεία ελέγχου ── */
+function vAud1(){
+ return`<h2 class="pt">Στοιχεία ελέγχου</h2>
+ <p class="pd">Εδώ ελέγχετε Ανακεφαλαιωτικό Πίνακα που συνέταξε κάποιος άλλος — ανάδοχος, μελετητής ή άλλη υπηρεσία. Συμπληρώστε ποιος τον υπέβαλε και ποιος τον ελέγχει· τα στοιχεία αυτά περνούν αυτούσια στην έκθεση ελέγχου και στην εισήγηση.</p>
+ <div class="card"><h3><span class="pill" style="background:var(--s1)">Α</span>Ο ελεγχόμενος Πίνακας</h3><div class="cb">
+  <div class="grid g4">
+   ${fld('Αύξων αριθμός Α.Π.Ε.','audit.meta.apeNo','number')}
+   ${fld('Συντάκτης / υποβάλλων','audit.meta.syntaktis','text','Ποιος συνέταξε και υπέβαλε τον Πίνακα.')}
+   ${fld('Αρ. πρωτ. υποβολής','audit.meta.arYpovolis')}
+   ${fld('Ημερομηνία υποβολής','audit.meta.imYpovolis','text','π.χ. 12-09-2026')}
+  </div>
+ </div></div>
+ <div class="card"><h3><span class="pill" style="background:var(--s7)">Β</span>Ο έλεγχος</h3><div class="cb">
+  <div class="grid g3">
+   ${fld('Ελεγκτής (ονοματεπώνυμο)','audit.meta.elegktis')}
+   ${fld('Ιδιότητα','audit.meta.elegktisEid')}
+   ${fld('Ημερομηνία ελέγχου','audit.meta.imElegxou','text','π.χ. 15-09-2026')}
+  </div>
+ </div></div>
+ <div class="card"><h3><span class="pill" style="background:var(--s8)">Γ</span>Ταυτότητα έργου</h3><div class="cb">
+  <p class="hint" style="margin:0 0 12px">Τα στοιχεία του έργου είναι κοινά με τη λειτουργία σύνταξης — ό,τι έχει ήδη συμπληρωθεί εκεί (ή διαβάστηκε από έγγραφα) ισχύει και εδώ.</p>
+  <div style="margin-bottom:12px">${fld('Τίτλος έργου','project.ergo')}</div>
+  <div class="grid g3">
+   ${fld('Ανάδοχος','project.anadoxos')}
+   ${fld('Διεύθυνση / Υπηρεσία','project.dnsi')}
+   ${fld('Προϊστάμενος','project.proistamenos')}
+  </div>
+ </div></div>
+ <div class="row"><button class="btn c1" onclick="go('e2')">Συνέχεια → Ανάγνωση Α.Π.Ε.</button></div>`;
+}
+
+/* ── βήμα 2: φόρτωση & ανάγνωση ── */
+function vAud2(){
+ const A=S.audit;
+ return`<h2 class="pt">Ανάγνωση Α.Π.Ε.</h2>
+ <p class="pd">Φορτώστε τον Ανακεφαλαιωτικό Πίνακα που σας παραδόθηκε, μαζί με τα φύλλα αναθεώρησης αν υπάρχουν. Η εφαρμογή ξαναϋπολογίζει κάθε γραμμή, κάθε άθροισμα και κάθε νόμιμο όριο ανεξάρτητα, και συγκρίνει με τα δηλωθέντα.</p>
+ <div class="card"><h3><span class="pill" style="background:var(--s3)">📥</span>Αρχεία προς έλεγχο</h3><div class="cb">
+  ${dropZone('audf','Σύρετε εδώ τον Α.Π.Ε. και τα φύλλα αναθεώρησης','PDF, κείμενο ή φωτογραφία / σαρωμένο — μπορείτε να επιλέξετε πολλά αρχεία μαζί')}
+  <p class="hint" style="margin:10px 0 0">Τα φύλλα αναθεώρησης αναγνωρίζονται αυτόματα από το περιεχόμενό τους και ελέγχονται με τους κανόνες του άρθρου 153. Οι φωτογραφίες στέλνονται για ανάγνωση μόνο μετά από δική σας έγκριση, αρχείο-αρχείο.</p>
+  ${A.names.length?`<div class="note g" style="margin-top:12px"><b>Αναγνώστηκαν:</b><br>${A.names.map(E).join('<br>')}</div>`:''}
+  ${A.findings.length?`<div class="row" style="margin-top:12px">
+    <button class="btn c7" onclick="go('e3')">Συνέχεια → Πόρισμα ελέγχου</button>
+    <button class="btn gh" onclick="clearAudit()">Καθαρισμός ελέγχου</button></div>`:''}
+ </div></div>
+ <div class="card"><h3><span class="pill">?</span>Πώς γίνεται ο έλεγχος</h3><div class="cb">
+  <ol style="margin:0;padding-left:20px;line-height:1.7;font-size:13px">
+   ${AUD_STEPS.slice(1).map(s=>`<li><b>${E(s.t.replace(/^Βήμα \d+ — /,''))}.</b> ${E(s.d)}</li>`).join('')}
+  </ol>
+  <p class="hint" style="margin:10px 0 0">Κάθε εύρημα δείχνει το <b>δηλωθέν</b> (ό,τι γράφει το έγγραφο) δίπλα στο <b>υπολογισμένο</b> (το αποτέλεσμα του ανεξάρτητου υπολογισμού), ώστε η διαφορά να είναι αμέσως ορατή και επαληθεύσιμη με το χέρι.</p>
  </div></div>`;
+}
 
- if(!auditFind.length) return `<h2 class="pt">Έλεγχος Α.Π.Ε. τρίτου</h2>
-  <p class="pd">Η αντίστροφη λειτουργία: αντί να συντάξετε Πίνακα από τον προϋπολογισμό, ελέγχετε Πίνακα που σας παραδόθηκε.</p>${zone}`;
-
- const rows=auditFind.map(x=>`<tr>
-   <td>${sev(x.sev)}</td><td><span class="tag">${E(x.area)}</span></td>
-   <td>${E(x.what)}${x.note?'<br><span class="hint">'+E(x.note)+'</span>':''}</td>
-   <td class="n">${E(x.decl)}</td><td class="n"><b>${E(x.calc)}</b></td></tr>`).join('');
-
- return `<h2 class="pt">Πόρισμα ελέγχου</h2>
- <p class="pd">Κάθε μέγεθος επανυπολογίστηκε από τα πρωτογενή δεδομένα του Πίνακα. Η στήλη «δηλωθέν» είναι ό,τι γράφει το έγγραφο, η στήλη «υπολογισμένο» είναι το αποτέλεσμα της εφαρμογής.</p>
- ${nErr?`<div class="note b"><b>Εντοπίστηκαν ${nErr} σφάλματα.</b> Δείτε τις γραμμές με ένδειξη ΣΦΑΛΜΑ. Ο Πίνακας δεν πρέπει να προωθηθεί για έγκριση χωρίς διόρθωση.</div>`
-   :`<div class="note g"><b>Δεν εντοπίστηκαν αριθμητικά σφάλματα.</b> Απομένει ο υπηρεσιακός έλεγχος των δικαιολογητικών και των εγκρίσεων.</div>`}
+/* ── βήμα 3: πόρισμα ── */
+function vAud3(){
+ const A=S.audit;
+ if(!A.findings.length) return`<h2 class="pt">Πόρισμα ελέγχου</h2>
+  <p class="pd">Δεν έχει διαβαστεί ακόμη Πίνακας.</p>
+  <div class="row"><button class="btn c3" onclick="go('e2')">→ Φόρτωση αρχείων στο βήμα 2</button></div>`;
+ const nErr=A.findings.filter(x=>x.sev==='err').length;
+ const nWarn=A.findings.filter(x=>x.sev==='warn').length;
+ const nOk=A.findings.filter(x=>x.sev==='ok').length;
+ const v=audVerdict(), V=AUD_VERDICT[v];
+ const autoV=nErr?'return':(nWarn?'obs':'approve');
+ const groups=audGroups().map(g=>`
+  <div class="card"><h3><span class="pill">${E(g.t.match(/Βήμα (\d+)/)?.[1]||'•')}</span>${E(g.t)}</h3>
+   ${g.d?`<div class="cb" style="padding-bottom:0"><p class="hint" style="margin:0">${E(g.d)}</p></div>`:''}
+   <div class="scroll"><table class="t"><thead><tr><th style="width:104px">Κρίση</th>
+    <th>Σημείο ελέγχου</th><th class="n" style="width:130px">Δηλωθέν</th>
+    <th class="n" style="width:130px">Υπολογισμένο</th></tr></thead><tbody>
+   ${g.rows.map(x=>`<tr><td>${audSev(x.sev)}</td>
+     <td>${E(x.what)}${x.note?'<br><span class="hint">'+E(x.note)+'</span>':''}${x.src?'<br><span class="hint" style="opacity:.7">'+E(x.src)+'</span>':''}</td>
+     <td class="n">${E(x.decl)}</td><td class="n"><b>${E(x.calc)}</b></td></tr>`).join('')}
+   </tbody></table></div></div>`).join('');
+ return`<h2 class="pt">Πόρισμα ελέγχου</h2>
+ <p class="pd">Κάθε μέγεθος επανυπολογίστηκε από τα πρωτογενή δεδομένα του Πίνακα. Η στήλη «δηλωθέν» είναι ό,τι γράφει το έγγραφο· η στήλη «υπολογισμένο» είναι το αποτέλεσμα της εφαρμογής.</p>
+ <div class="note ${V.cls==='bad'?'b':(V.cls==='warn'?'w':'g')}"><b>${V.t}.</b> ${V.d}</div>
  <div class="row" style="margin-bottom:14px">
   <span class="st bad"><b></b>${nErr} σφάλματα</span>
   <span class="st warn"><b></b>${nWarn} σημεία προσοχής</span>
   <span class="st ok"><b></b>${nOk} επαληθευμένα</span>
  </div>
- ${zone}
- <div class="card"><h3><span class="pill">Π</span>Ευρήματα</h3>
-  <div class="scroll"><table class="t"><thead><tr><th style="width:104px">Κρίση</th>
-   <th style="width:110px">Πεδίο</th><th>Σημείο ελέγχου</th>
-   <th class="n" style="width:120px">Δηλωθέν</th><th class="n" style="width:120px">Υπολογισμένο</th>
-  </tr></thead><tbody>${rows}</tbody></table></div></div>
- ${auditSum?`<div class="card"><h3><span class="pill">Σ</span>Ανεξάρτητος υπολογισμός ορίων</h3>
+ ${groups}
+ ${A.summary?`<div class="card"><h3><span class="pill">Σ</span>Ανεξάρτητος υπολογισμός ορίων ανά ομάδα</h3>
   <table class="t"><thead><tr><th>Ομάδα</th><th class="n">Συμβατική δαπάνη</th><th class="n">Επί πλέον</th>
    <th class="n">Επί έλαττον</th><th class="n">Σε χρήση</th><th class="n">% ομάδας</th><th class="c">Όριο 20%</th></tr></thead><tbody>
-   ${auditSum.gres.map(g=>`<tr><td>${E(g.name)}</td><td class="n">${F(g.base)}</td>
+   ${A.summary.gres.map(g=>`<tr><td>${E(g.name)}</td><td class="n">${F(g.base)}</td>
     <td class="n">${g.p?'<span class="plus">'+F(g.p)+'</span>':'—'}</td>
     <td class="n">${g.mi?'<span class="minus">'+F(g.mi)+'</span>':'—'}</td>
     <td class="n"><b>${F(g.used)}</b></td><td class="n">${P(g.pct)}</td>
     <td class="c">${g.pct>20?'<span class="st bad"><b></b>Υπέρβαση '+F(g.over)+' €</span>':'<span class="st ok"><b></b>Εντός</span>'}</td></tr>`).join('')}
-   <tr class="tot"><td>ΣΥΝΟΛΟ</td><td class="n"></td><td class="n">${F(auditSum.plus)}</td>
-    <td class="n">${F(auditSum.minus)}</td><td class="n">${F(auditSum.eli)}</td>
-    <td class="n">${P(auditSum.maxPct)}</td><td class="c">μεταφορές ${P(auditSum.pct10)}</td></tr>
-  </tbody></table></div>`:''}`;
+   <tr class="tot"><td>ΣΥΝΟΛΟ</td><td class="n"></td><td class="n">${F(A.summary.plus)}</td>
+    <td class="n">${F(A.summary.minus)}</td><td class="n">${F(A.summary.eli)}</td>
+    <td class="n">${P(A.summary.maxPct)}</td><td class="c">μεταφορές ${P(A.summary.pct10)}</td></tr>
+  </tbody></table></div>`:''}
+ <div class="card"><h3><span class="pill" style="background:var(--s7)">✓</span>Κρίση του ελεγκτή</h3><div class="cb">
+  <div class="grid g2">
+   <label class="f"><span>Συμπέρασμα</span>
+    <select onchange="setv('audit.meta.symperasma',this.value,false);render()">
+     <option value="auto"${A.meta.symperasma==='auto'?' selected':''}>Αυτόματα από τα ευρήματα — ${AUD_VERDICT[autoV].t}</option>
+     <option value="approve"${A.meta.symperasma==='approve'?' selected':''}>Πρόταση έγκρισης</option>
+     <option value="obs"${A.meta.symperasma==='obs'?' selected':''}>Έγκριση με παρατηρήσεις</option>
+     <option value="return"${A.meta.symperasma==='return'?' selected':''}>Επιστροφή για διόρθωση</option>
+    </select>
+    <span class="hint">Η αυτόματη κρίση προκύπτει από τα ευρήματα· μπορείτε να την αλλάξετε αν η υπηρεσιακή εκτίμηση διαφέρει.</span></label>
+   ${''}
+  </div>
+  <div style="margin-top:12px">${area('Παρατηρήσεις του ελεγκτή','audit.meta.paratiriseis','Ελεύθερο κείμενο — μεταφέρεται αυτούσιο στην έκθεση ελέγχου και στην εισήγηση.',3)}</div>
+ </div></div>
+ <div class="row">
+  <button class="btn c8" onclick="go('e4')">Συνέχεια → Έγγραφα ελέγχου</button>
+  <button class="btn gh" onclick="exportAudit()">⬇ Πόρισμα σε Excel</button>
+  <button class="btn gh" onclick="adoptAudit()" ${A.data?'':'disabled'}>Υιοθέτηση στοιχείων στη σύνταξη</button>
+  <button class="btn gh" onclick="clearAudit()">Καθαρισμός</button>
+ </div>`;
+}
+
+/* ── βήμα 4: έγγραφα ελέγχου ── */
+const ADOCS=[
+ {id:'ekth',t:'Έκθεση ελέγχου',c:'c7'},
+ {id:'eisA',t:'Εισήγηση προς Επιτροπή',c:'c3'},
+];
+let curAudDoc='ekth';
+function vAud4(){
+ const A=S.audit;
+ if(!A.findings.length) return`<h2 class="pt">Έγγραφα ελέγχου</h2>
+  <p class="pd">Τα έγγραφα συντάσσονται από το πόρισμα — φορτώστε πρώτα τον Πίνακα στο βήμα 2.</p>
+  <div class="row"><button class="btn c3" onclick="go('e2')">→ Φόρτωση αρχείων</button></div>`;
+ return`<h2 class="pt">Έγγραφα ελέγχου</h2>
+ <p class="pd">Η έκθεση ελέγχου τεκμηριώνει τη μέθοδο και τα ευρήματα· η εισήγηση μεταφέρει το πόρισμα στο αποφασίζον όργανο. Τα κίτρινα σημεία είναι κενά που πρέπει να συμπληρώσετε — είτε στα βήματα 1–3, είτε στο Word.</p>
+ <div class="docbar noprint">
+  ${ADOCS.map(d=>`<button class="btn ${curAudDoc===d.id?d.c:'gh'}" onclick="curAudDoc='${d.id}';render()">${d.t}</button>`).join('')}
+ </div>
+ <div class="row noprint" style="margin-bottom:14px">
+  <button class="btn c8" onclick="exportDoc()">⬇ Λήψη σε Word</button>
+  <button class="btn gh" onclick="window.print()">🖨 Εκτύπωση / PDF</button>
+  <button class="btn gh" onclick="copyDoc()">📋 Αντιγραφή</button>
+  <button class="btn gh" onclick="exportAudit()">⬇ Πόρισμα σε Excel</button>
+  <span class="hint" id="dmsg"></span>
+ </div>
+ <div class="doc" id="docv">${curAudDoc==='ekth'?audEkth():audEis()}</div>`;
+}
+
+/* ── έγγραφο: έκθεση ελέγχου ── */
+function audEkth(){
+ const A=S.audit,m=A.meta,p=S.project,s=A.summary;
+ const D=m.imElegxou||p.imerominia||'......../......../20....';
+ const v=audVerdict(),V=AUD_VERDICT[v];
+ const nErr=A.findings.filter(x=>x.sev==='err').length;
+ const nWarn=A.findings.filter(x=>x.sev==='warn').length;
+ const nOk=A.findings.filter(x=>x.sev==='ok').length;
+ const sevTxt=x=>x==='err'?'ΣΦΑΛΜΑ':(x==='warn'?'ΠΡΟΣΟΧΗ':'ΟΡΘΟ');
+ const groups=audGroups().map(g=>`
+  <h3>${E(g.t)}</h3>${g.d?`<p><i>${E(g.d)}</i></p>`:''}
+  <table><tr><th style="width:70px">Κρίση</th><th>Σημείο ελέγχου</th>
+   <th class="n" style="width:105px">Δηλωθέν</th><th class="n" style="width:105px">Υπολογισμένο</th></tr>
+  ${g.rows.map(x=>`<tr><td>${sevTxt(x.sev)}</td>
+    <td>${E(x.what)}${x.note?'<br><i>'+E(x.note)+'</i>':''}</td>
+    <td class="n">${E(x.decl)}</td><td class="n">${E(x.calc)}</td></tr>`).join('')}
+  </table>`).join('');
+ const concl=v==='return'
+  ?`Από τον έλεγχο προέκυψαν <b>${nErr} σφάλματα</b>${nWarn?` και ${nWarn} σημεία προσοχής`:''}, τα οποία αναλύονται στα ευρήματα. Ο Πίνακας <b>πρέπει να επιστραφεί στον συντάκτη του για διόρθωση και επανυποβολή</b>· δεν πρέπει να προωθηθεί για έγκριση με τα σφάλματα αυτά.`
+  :v==='obs'
+  ?`Από τον έλεγχο δεν προέκυψαν αριθμητικά σφάλματα· επισημαίνονται όμως <b>${nWarn} σημεία προσοχής</b> που χρειάζονται τεκμηρίωση, όπως αναλύεται στα ευρήματα. Με την επιφύλαξη αυτών, ο Πίνακας μπορεί να προωθηθεί για έγκριση.`
+  :`Από τον έλεγχο δεν προέκυψαν αριθμητικά σφάλματα ούτε υπερβάσεις των ορίων του άρθρου 156. Επαληθεύτηκαν ${nOk} σημεία. Ο Πίνακας μπορεί να προωθηθεί για έγκριση.`;
+ return`${hdr()}<p class="rgt">Ρόδος, ${D}</p>
+ <h1>ΕΚΘΕΣΗ ΕΛΕΓΧΟΥ ${m.apeNo||1}ου ΑΝΑΚΕΦΑΛΑΙΩΤΙΚΟΥ ΠΙΝΑΚΑ ΕΡΓΑΣΙΩΝ</h1>
+ <p class="ctr"><i>(άρθρα 153 και 156 του Ν. 4412/2016)</i></p>
+ <h2>Α. ΣΤΟΙΧΕΙΑ ΤΟΥ ΕΛΕΓΧΟΥ</h2>
+ <table>
+  <tr><td>Ελεγχόμενος Πίνακας</td><td>${m.apeNo||1}ος Α.Π.Ε. του έργου «${E(p.ergo)}»</td></tr>
+  <tr><td>Υποβλήθηκε από</td><td>${ph(m.syntaktis,'συντάκτης / υποβάλλων')}</td></tr>
+  <tr><td>Αρ. πρωτ. / ημερομηνία υποβολής</td><td>${ph(m.arYpovolis,'αρ. πρωτ.')} / ${ph(m.imYpovolis,'ημερομηνία')}</td></tr>
+  <tr><td>Αρχεία που εξετάστηκαν</td><td>${A.names.length?A.names.map(E).join('<br>'):'<span class="ph">[αρχεία]</span>'}</td></tr>
+  <tr><td>Ο έλεγχος διενεργήθηκε από</td><td>${ph(m.elegktis,'ελεγκτής')}${m.elegktisEid?', '+E(m.elegktisEid):''}</td></tr>
+ </table>
+ <h2>Β. ΜΕΘΟΔΟΣ ΕΛΕΓΧΟΥ</h2>
+ <p>Κάθε μέγεθος του Πίνακα επανυπολογίστηκε ανεξάρτητα από τα πρωτογενή στοιχεία του — ποσότητες, τιμές μονάδας και ποσοστά — και συγκρίθηκε με το αναγραφόμενο. Ο έλεγχος διενεργήθηκε σε πέντε βήματα: (1) αριθμητική επαλήθευση κάθε άρθρου (ποσότητα × τιμή = δαπάνη), (2) αθροίσματα ομάδων και ποσά εκπτώσεων, (3) ανασύνθεση της οικονομικής ανακεφαλαίωσης, (4) ανεξάρτητος υπολογισμός των ορίων της παρ. 3 του άρθρου 156, (5) έλεγχος των συντελεστών αναθεώρησης του άρθρου 153. Όπου αναγράφεται «δηλωθέν» νοείται το ποσό όπως γράφεται στον ελεγχόμενο Πίνακα και όπου «υπολογισμένο» το αποτέλεσμα του ανεξάρτητου υπολογισμού.</p>
+ <h2>Γ. ΕΥΡΗΜΑΤΑ</h2>
+ ${groups||'<p><span class="ph">[δεν υπάρχουν ευρήματα]</span></p>'}
+ ${s?`<h2>Δ. ΟΡΙΑ ΤΟΥ ΑΡΘΡΟΥ 156 ΑΝΑ ΟΜΑΔΑ (ανεξάρτητος υπολογισμός)</h2>
+ <table><tr><th>Ομάδα</th><th class="n">Συμβατική δαπάνη</th><th class="n">Επί πλέον</th>
+  <th class="n">Επί έλαττον</th><th class="n">«Επί έλασσον» σε χρήση</th><th class="n">%</th><th>Όριο 20%</th></tr>
+ ${s.gres.map(g=>`<tr><td>${E(g.name)}</td><td class="n">${F(g.base)}</td>
+  <td class="n">${g.p?F(g.p):'—'}</td><td class="n">${g.mi?F(g.mi):'—'}</td>
+  <td class="n">${F(g.used)}</td><td class="n">${P(g.pct)}</td>
+  <td>${g.pct>20?'ΥΠΕΡΒΑΣΗ '+F(g.over)+' €':'εντός'}</td></tr>`).join('')}
+ <tr><td><b>ΣΥΝΟΛΟ</b></td><td class="n"></td><td class="n"><b>${F(s.plus)}</b></td>
+  <td class="n"><b>${F(s.minus)}</b></td><td class="n"><b>${F(s.eli)}</b></td>
+  <td class="n"><b>${P(s.maxPct)}</b></td><td>μεταφορές ${P(s.pct10)} (όριο 10%)</td></tr></table>
+ <p>Οι επί πλέον δαπάνες ανέρχονται σε ${F(s.plus)} €, εκ των οποίων ${F(s.eli)} € καλύπτονται από «επί έλασσον» δαπάνες και ${F(s.aprNeed)} € βαρύνουν το κονδύλι των απροβλέπτων${s.aprC!=null?' (διαθέσιμο κατά τον Πίνακα: '+F(s.aprC)+' €)':''}.${s.eli>0?' Λόγω της χρήσης «επί έλασσον» δαπανών απαιτείται σύμφωνη γνώμη του οικείου Τεχνικού Συμβουλίου (άρθρο 156 §3γ΄, τελευταίο εδάφιο).':''}</p>`:''}
+ <h2>${s?'Ε':'Δ'}. ΣΥΜΠΕΡΑΣΜΑ</h2>
+ <p>${concl}</p>
+ ${m.paratiriseis?`<p><b>Παρατηρήσεις:</b> ${E(m.paratiriseis).replace(/\n/g,'</p><p>')}</p>`:''}
+ ${sig2(`<b>Ο ΕΛΕΓΞΑΣ</b><br><br><br><br>${ph(m.elegktis,'ελεγκτής')}<br>${E(m.elegktisEid||'')}`,
+       `<b>ΘΕΩΡΗΘΗΚΕ</b><br>Ο Προϊστάμενος ${E(p.dnsi)}<br><br><br>${ph(p.proistamenos,'προϊστάμενος')}<br>${E(p.proistamenosEid||'')}`)}`;
+}
+
+/* ── έγγραφο: εισήγηση βάσει του ελέγχου ── */
+function audEis(){
+ const A=S.audit,m=A.meta,p=S.project,s=A.summary;
+ const D=m.imElegxou||p.imerominia||'......../......../20....';
+ const v=audVerdict();
+ const nErr=A.findings.filter(x=>x.sev==='err').length;
+ const nWarn=A.findings.filter(x=>x.sev==='warn').length;
+ const eisig=v==='return'
+  ?`Τη <b>μη έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}» και την <b>επιστροφή του στον συντάκτη του</b> (${ph(m.syntaktis,'συντάκτης')}) για διόρθωση των σφαλμάτων που αναλύονται στη συνημμένη έκθεση ελέγχου και επανυποβολή.`
+  :v==='obs'
+  ?`Την <b>έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}»${s&&s.totA!=null?', συνολικής δαπάνης '+F(s.totA)+' € με Φ.Π.Α.':''}, με τις παρατηρήσεις που διατυπώνονται στη συνημμένη έκθεση ελέγχου, σύμφωνα με τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016.`
+  :`Την <b>έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}»${s&&s.totA!=null?', συνολικής δαπάνης '+F(s.totA)+' € με Φ.Π.Α.':''}, σύμφωνα με τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016.`;
+ return`<div class="hdr"><div><b>${E(p.anathetousa)}</b><br>${E(p.nomos)}<br><b>${E(p.dimos)}</b><br>${E(p.dnsi)}<br><br>
+  Πληροφορίες: ${ph(m.elegktis,'ελεγκτής')}</div>
+  <div>Ρόδος, ${D}<br>Αρ. καταχώρησης: ${ph(p.arKataxwrisis,'…')}<br><br>
+  <b>ΠΡΟΣ:</b><br><b>${E(p.proedrosIdiotita||'Πρόεδρο')} της αρμόδιας Επιτροπής</b><br><b>${ph(p.proedros,'ονοματεπώνυμο')}</b></div></div>
+ <p><b>ΘΕΜΑ:</b> ${v==='return'?'Επιστροφή προς διόρθωση':'Έγκριση'} του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}», κατόπιν ελέγχου.</p>
+ <h2>Έχοντας υπόψη:</h2>
+ <ul>
+  <li>Τη με αρ. πρωτ. ${ph(p.arPrwtSymvasis,'αρ. πρωτ.')} σύμβαση του έργου, αναδόχου ${ph(p.anadoxos,'ανάδοχος')}.</li>
+  <li>Τον ${m.apeNo||1}ο Ανακεφαλαιωτικό Πίνακα Εργασιών, όπως υποβλήθηκε από ${ph(m.syntaktis,'συντάκτη')}${m.arYpovolis?' με το υπ’ αριθ. πρωτ. '+E(m.arYpovolis)+(m.imYpovolis?'/'+E(m.imYpovolis):'')+' έγγραφο':''}.</li>
+  <li>Την από ${ph(m.imElegxou,'ημερομηνία')} έκθεση ελέγχου της Υπηρεσίας μας.</li>
+  <li>Τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως ισχύουν.</li>
+ </ul>
+ <p>Η Υπηρεσία μας διενήργησε πλήρη έλεγχο του υποβληθέντος Πίνακα: επανυπολογίστηκε ανεξάρτητα η αριθμητική κάθε άρθρου, τα αθροίσματα των ομάδων και οι εκπτώσεις, η οικονομική ανακεφαλαίωση, τα όρια της παρ. 3 του άρθρου 156 και οι συντελεστές αναθεώρησης του άρθρου 153.</p>
+ <p>${nErr?`Από τον έλεγχο προέκυψαν <b>${nErr} σφάλματα</b>${nWarn?` και ${nWarn} σημεία προσοχής`:''}, όπως αναλύονται στη συνημμένη έκθεση ελέγχου.`
+   :`Από τον έλεγχο δεν προέκυψαν αριθμητικά σφάλματα${nWarn?`· επισημαίνονται ${nWarn} σημεία προσοχής, όπως αναλύονται στη συνημμένη έκθεση ελέγχου`:''}.`}
+ ${s&&s.symC!=null&&s.symA!=null?` Το συμβατικό ποσό ${near(s.symC,s.symA,0.005)?'παραμένει αμετάβλητο στα '+F(s.symC)+' €':'μεταβάλλεται από '+F(s.symC)+' € σε '+F(s.symA)+' €, ήτοι '+P(s.symPct)}${s.eli>0?', με χρήση «επί έλασσον» δαπανών '+F(s.eli)+' € που απαιτεί σύμφωνη γνώμη του οικείου Τεχνικού Συμβουλίου':''}.`:''}</p>
+ ${m.paratiriseis?`<p><b>Παρατηρήσεις:</b> ${E(m.paratiriseis).replace(/\n/g,'</p><p>')}</p>`:''}
+ <p class="ctr">Κατόπιν των ανωτέρω, η Υπηρεσία μας</p>
+ <h1>ΕΙΣΗΓΕΙΤΑΙ</h1>
+ <p>${eisig}</p>
+ <p><b>Συνημμένα:</b> Έκθεση ελέγχου, ο ελεγχόμενος Α.Π.Ε. και τα φύλλα αναθεώρησης.</p>
+ ${sig2(`Ο Προϊστάμενος<br>${E(p.dnsi)}<br><br><br>${ph(p.proistamenos,'προϊστάμενος')}<br>${E(p.proistamenosEid||'')}`,
+       `Ο Αντιδήμαρχος<br>Τεχνικών Έργων &amp; Υποδομών<br><br><br>${ph(p.antidimarxos,'αντιδήμαρχος')}`)}`;
 }
 
 function exportAudit(){
+ const A=S.audit;
  const rows=[['Κρίση','Πεδίο','Σημείο ελέγχου','Δηλωθέν','Υπολογισμένο','Παρατήρηση','Αρχείο']];
- auditFind.forEach(x=>rows.push([
+ A.findings.forEach(x=>rows.push([
   x.sev==='err'?'ΣΦΑΛΜΑ':(x.sev==='warn'?'ΠΡΟΣΟΧΗ':'ΕΝΤΑΞΕΙ'),x.area,x.what,x.decl,x.calc,x.note||'',x.src||'']));
  const sh=[{name:'Πόρισμα ελέγχου',rows}];
- if(auditSum) sh.push({name:'Όρια ανά ομάδα',rows:[
+ if(A.summary) sh.push({name:'Όρια ανά ομάδα',rows:[
    ['Ομάδα','Συμβατική δαπάνη','Επί πλέον','Επί έλαττον','Σε χρήση','% ομάδας','Όριο 20%','Υπέρβαση'],
-   ...auditSum.gres.map(g=>[g.name,g.base,g.p,g.mi,g.used,R2(g.pct),g.lim,g.over])]});
+   ...A.summary.gres.map(g=>[g.name,g.base,g.p,g.mi,g.used,R2(g.pct),g.lim,g.over])]});
  downloadXlsx(sh,'Πόρισμα ελέγχου ΑΠΕ');
 }
 </script>
