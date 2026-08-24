@@ -117,6 +117,9 @@ tr.sum td{background:#F7F9FB;font-weight:700}
 tr.tot td{background:var(--ink);color:#fff;font-weight:700}
 tr.chg td{background:#FFFBF0}
 tr.newi td{background:#F6F2FF}
+tr.ocrq td{background:#FFF7E6}
+tr.ocrq td:first-child{box-shadow:inset 3px 0 0 #E8A33D}
+.ocrmark{color:#B4740A;font-weight:700;cursor:help;margin-left:4px}
 td input.q{width:88px;padding:4px 6px;border:1px solid var(--line);border-radius:5px}
 td input.q.d{border-color:var(--s4);background:#FFF6F6}
 td input.q.u{border-color:var(--s2);background:#F3FCF7}
@@ -232,11 +235,11 @@ label.f>span .clip{margin-left:auto}
 
       <button onclick="resetAll()">🗑 Νέο κενό έργο</button>
       <input type="file" id="loadf" accept=".json" style="display:none" onchange="loadJSON(event)">
-      <input type="file" id="budf" accept=".pdf,.xlsx,.csv,.txt,.json" style="display:none" onchange="loadBudgetFile(event)">
-      <input type="file" id="offf" accept=".pdf,.txt" style="display:none" onchange="loadOfferFile(event)">
-      <input type="file" id="docf" accept=".pdf,.txt,.html" style="display:none" onchange="loadDocFile(event)">
-      <input type="file" id="audf" accept=".pdf,.txt" multiple style="display:none" onchange="loadAuditFile(event)">
-      <input type="file" id="batchf" accept=".pdf,.xlsx,.txt,.html" multiple style="display:none" onchange="batchImport(event)">
+      <input type="file" id="budf" accept=".pdf,.xlsx,.csv,.txt,.json,.png,.jpg,.jpeg,.webp" style="display:none" onchange="loadBudgetFile(event)">
+      <input type="file" id="offf" accept=".pdf,.txt,.png,.jpg,.jpeg,.webp" style="display:none" onchange="loadOfferFile(event)">
+      <input type="file" id="docf" accept=".pdf,.txt,.html,.png,.jpg,.jpeg,.webp" style="display:none" onchange="loadDocFile(event)">
+      <input type="file" id="audf" accept=".pdf,.txt,.png,.jpg,.jpeg,.webp" multiple style="display:none" onchange="loadAuditFile(event)">
+      <input type="file" id="batchf" accept=".pdf,.xlsx,.txt,.html,.png,.jpg,.jpeg,.webp" multiple style="display:none" onchange="batchImport(event)">
     </div>
   </aside>
   <div class="main">
@@ -588,7 +591,12 @@ async function pdfToText(arrayBuffer){
   extractRuns(txt,fonts,page,runs);
   if(page%3===0) await step(page,total,'σελίδα '+page+(total?' από '+total:''));
  }
- if(!runs.length) throw new Error('Δεν βρέθηκε αναγνώσιμο κείμενο. Το PDF μπορεί να είναι σαρωμένη εικόνα.');
+ if(!runs.length){
+  /* Σημαδεμένο σφάλμα: ο καλών πρέπει να ξεχωρίσει το «σαρωμένο» από κάθε
+     άλλη αποτυχία, για να προτείνει ανάγνωση με αναγνώριση εικόνας. */
+  const e=new Error('Δεν βρέθηκε αναγνώσιμο κείμενο. Το PDF είναι πιθανότατα σαρωμένη εικόνα.');
+  e.scanned=true; throw e;
+ }
 
  // ομαδοποίηση σε γραμμές
  runs.sort((a,b)=> a.pg-b.pg || b.y-a.y || a.x-b.x);
@@ -1299,7 +1307,7 @@ function vProject(){
   <div class="row">
    <button class="btn c1" onclick="document.getElementById('batchf').click()">📥 Επιλογή εγγράφων</button>
    ${batchReport?'<button class="btn gh" onclick="openBatchPanel()">Προβολή τελευταίας αναφοράς</button>':''}
-   <span class="hint">Δέχεται PDF και κείμενο. Μπορείτε να επιλέξετε πολλά αρχεία ταυτόχρονα.</span>
+   <span class="hint">Δέχεται PDF, κείμενο και φωτογραφίες ή σκαναρισμένα (JPG, PNG). Μπορείτε να επιλέξετε πολλά αρχεία ταυτόχρονα.</span>
   </div></div></div>
 
  <div class="card"><h3><span class="pill">Α</span>Ταυτότητα έργου</h3><div class="cb">
@@ -1421,8 +1429,11 @@ function vBudget(){
     <button class="btn gh sm" style="float:right" onclick="addItem(${gi})">＋ άρθρο</button></td>
    <td class="n" id="bh-${gi}">${F(o.budRaw)}</td><td></td></tr>`;
   g.items.forEach((it,ii)=>{
-   rows+=`<tr${it.isNew?' class="newi"':''}>
-    <td><input type="text" value="${E(it.at||'')}" oninput="setItem(${gi},${ii},'at',this.value)" style="width:62px;padding:4px 6px"></td>
+   /* Η γραμμή που ήρθε από ανάγνωση εικόνας και δεν διαβάστηκε με βεβαιότητα
+      μένει σημασμένη μέχρι να την αγγίξει ο χρήστης. */
+   const cls=[it.isNew?'newi':'', it.ocrAvevaio?'ocrq':''].filter(Boolean).join(' ');
+   rows+=`<tr id="bt-${gi}-${ii}"${cls?` class="${cls}"`:''}>
+    <td><input type="text" value="${E(it.at||'')}" oninput="setItem(${gi},${ii},'at',this.value)" style="width:${it.ocrAvevaio?44:62}px;padding:4px 6px">${it.ocrAvevaio?'<span class="ocrmark" title="Διαβάστηκε από εικόνα χωρίς βεβαιότητα — αντιπαραβάλετε τη γραμμή με το χαρτί.">⚠</span>':''}</td>
     <td><input type="text" value="${E(it.kodikos||'')}" oninput="setItem(${gi},${ii},'kodikos',this.value)" style="width:118px;padding:4px 6px"></td>
     <td><input type="text" value="${E(it.perigrafi||'')}" oninput="setItem(${gi},${ii},'perigrafi',this.value)" style="padding:4px 6px"></td>
     <td><input type="text" value="${E(it.kodAnath||'')}" oninput="setItem(${gi},${ii},'kodAnath',this.value)" style="width:88px;padding:4px 6px"></td>
@@ -1438,6 +1449,7 @@ function vBudget(){
  return`<h2 class="pt">Προϋπολογισμός μελέτης</h2>
  <p class="pd">Οι ποσότητες αυτές είναι και οι συμβατικές ποσότητες. Στο βήμα 4 θα δηλώσετε τις νέες ποσότητες του Ανακεφαλαιωτικού Πίνακα.</p>
  ${importBox()}
+ ${ocrBanner()}
  <div class="card"><h3><span class="pill">${S.groups.length}</span>Ομάδες εργασιών
    <span style="margin-left:auto"><button class="btn c2 sm" onclick="addGroup()">＋ Προσθήκη ομάδας</button></span></h3>
   <div class="scroll"><table class="t"><thead><tr>
@@ -1447,6 +1459,28 @@ function vBudget(){
    <th class="n" style="width:110px">Δαπάνη</th><th style="width:44px"></th>
   </tr></thead><tbody>${rows}</tbody></table></div></div>
  <div id="budSum">${budgetSummary(c)}</div>`;
+}
+/* Πόσες γραμμές του τρέχοντος έργου προέρχονται από ανάγνωση εικόνας και
+   δεν έχουν ακόμη ελεγχθεί. */
+function ocrPending(){
+ let n=0;
+ S.groups.forEach(g=>g.items.forEach(it=>{ if(it.ocrAvevaio) n++; }));
+ return n;
+}
+function ocrBanner(){
+ const n=ocrPending();
+ return `<div id="ocrbanner">${n?`<div class="note w"><b>${n} ${n===1?'γραμμή διαβάστηκε':'γραμμές διαβάστηκαν'} από εικόνα χωρίς βεβαιότητα.</b><br>`
+  +'Είναι σημασμένες με ⚠ και με κίτρινο φόντο. Αντιπαραβάλετέ τις με το χαρτί· '
+  +'η σήμανση φεύγει μόλις διορθώσετε ή επιβεβαιώσετε τη γραμμή.</div>':''}</div>`;
+}
+/* Το πλήκτρο πληκτρολογείται πάνω στη γραμμή· δεν γίνεται πλήρες render για να
+   μη χαθεί ο δρομέας, άρα η σήμανση φεύγει με απευθείας επέμβαση στο DOM. */
+function clearOcrMark(gi,ii){
+ const tr=document.getElementById('bt-'+gi+'-'+ii);
+ if(tr){ tr.classList.remove('ocrq');
+  const m=tr.querySelector('.ocrmark'); if(m) m.parentNode.removeChild(m); }
+ const b=document.getElementById('ocrbanner');
+ if(b) b.outerHTML=ocrBanner();
 }
 function budgetSummary(c){
  const p=S.project;
@@ -1463,7 +1497,8 @@ function budgetSummary(c){
 function importBox(){
  return`<div class="card"><h3><span class="pill">↧</span>Εισαγωγή από προϋπολογισμό</h3><div class="cb">
   <p class="hint" style="margin:0 0 9px">Επιλέξτε όλο το κείμενο του αρχείου «Προϋπολογισμός Μελέτης» (PDF ή Word) και επικολλήστε το εδώ. Ο αναγνώστης εντοπίζει ομάδες, άρθρα, ποσότητες και τιμές. Ελέγξτε το αποτέλεσμα στον πίνακα και διορθώστε ό,τι χρειάζεται.</p>
-  ${dropZone('budf','Σύρετε εδώ το αρχείο του προϋπολογισμού','PDF, Excel (.xlsx), CSV ή κείμενο — ή κάντε κλικ για επιλογή')}
+  ${dropZone('budf','Σύρετε εδώ το αρχείο του προϋπολογισμού','PDF, Excel (.xlsx), CSV, κείμενο — ή φωτογραφία/σκαναρισμένο (JPG, PNG)')}
+  <p class="hint" style="margin:10px 0 0">Αν το αρχείο είναι σαρωμένο ή φωτογραφία, δεν περιέχει κείμενο: η εφαρμογή ζητά πρώτα την άδειά σας και το στέλνει στην υπηρεσία ανάγνωσης του έργου. Ό,τι επιστρέψει ελέγχεται αριθμητικά (ποσότητα × τιμή έναντι της δαπάνης που γράφει το χαρτί, και άθροισμα έναντι του «Αθροίσματος» του εγγράφου) και οι αβέβαιες γραμμές σημειώνονται στον πίνακα.</p>
   <p class="hint" style="margin:12px 0 6px">Εναλλακτικά, επικολλήστε το κείμενο:</p>
   <textarea id="imp" rows="4" placeholder="Επικόλληση κειμένου προϋπολογισμού…"></textarea>
   <div class="row" style="margin-top:9px">
@@ -1475,7 +1510,7 @@ function importBox(){
   <p class="hint" style="margin:0 0 10px">Φορτώστε το Έντυπο Οικονομικής Προσφοράς του Ε.Σ.Η.ΔΗ.Σ. Οι εκπτώσεις αντιστοιχίζονται αυτόματα στις ομάδες με βάση τη δαπάνη τους, και συμπληρώνονται ο ανάδοχος, ο Α/Α προσφοράς, ο Α/Α συστήματος, η ημερομηνία, η χρηματοδότηση και ο Κ.Α.</p>
   <div class="row">
    <button class="btn c3" onclick="document.getElementById('offf').click()">💼 Εισαγωγή οικονομικής προσφοράς</button>
-   <span class="hint">Δέχεται PDF ή κείμενο. Απαιτείται να έχει φορτωθεί πρώτα ο προϋπολογισμός.</span>
+   <span class="hint">Δέχεται PDF, κείμενο ή φωτογραφία/σκαναρισμένο. Απαιτείται να έχει φορτωθεί πρώτα ο προϋπολογισμός.</span>
   </div></div></div>`;
 }
 
@@ -2194,6 +2229,7 @@ function setItem(gi,ii,k,v,num){
    if((Number(it.posotitaApe)||0)===old)it.posotitaApe=nv;}
   it[k]=nv;
  } else it[k]=v;
+ if(it.ocrAvevaio){ it.ocrAvevaio=false; clearOcrMark(gi,ii); }
  liveRefresh();
  soft();
 }
@@ -2534,17 +2570,31 @@ async function loadBudgetFile(ev){
   el.textContent='Ανάγνωση «'+f.name+'» — '+what+(total>4?' ('+Math.round(done/total*100)+'%)':'');
  };
  try{
-  let groups,meta;
+  let groups,meta,scan=null;
   if(/\.xlsx$/i.test(f.name)){
    const rows=await xlsxToRows(await f.arrayBuffer());
    ({groups,meta}=parseRows(rows));
+  }else if(isImage(f)){
+   scan=await readScanned(f);
+   if(!scan) throw declinedErr();
   }else{
    let txt;
-   if(/\.pdf$/i.test(f.name)) txt=await pdfToText(await f.arrayBuffer());
+   if(/\.pdf$/i.test(f.name)){
+    try{ txt=await pdfToText(await f.arrayBuffer()); }
+    catch(err){
+     /* Σαρωμένο PDF: δεν υπάρχει κείμενο να διαβαστεί τοπικά. Προτείνεται
+        ανάγνωση με αναγνώριση εικόνας — ο χρήστης αποφασίζει. */
+     if(!err||!err.scanned) throw err;
+     pdfProgress=null;
+     scan=await readScanned(f);
+     if(!scan) throw declinedErr();
+    }
+   }
    else if(/\.csv$/i.test(f.name)){ ({groups,meta}=parseRows(csvRows(await f.text()))); }
    else txt=await f.text();
-   if(!groups){ const r=parseBudget(txt); groups=r.groups; meta=r.meta; }
+   if(!scan&&!groups){ const r=parseBudget(txt); groups=r.groups; meta=r.meta; }
   }
+  if(scan){ groups=scan.v.groups; meta=scanMeta(scan.res); }
   if(groups.length){
    /* Μηδενίζονται μόνο όσα προέρχονται από τον προϋπολογισμό. Ο τίτλος, τα
       πρόσωπα, οι αποφάσεις και το μητρώο εγγράφων είναι δουλειά του χρήστη
@@ -2559,6 +2609,17 @@ async function loadBudgetFile(ev){
   }
   pdfProgress=null;
   applyMeta(meta); S.groups=groups;
+  if(scan){
+   const clean = !scan.v.bad.length && !scan.v.uncertain.length
+     && scan.v.declared!=null && Math.abs(scan.v.diff)<=0.02;
+   /* Ποτέ πράσινο: το ποσό προήλθε από ανάγνωση εικόνας, όχι από ψηφιακό
+      αρχείο, και ο έλεγχος του χρήστη παραμένει απαραίτητος. */
+   flashMsg={k:clean?'w':'b',
+    t:clean?'Ο προϋπολογισμός διαβάστηκε από εικόνα και επαληθεύτηκε αριθμητικά.'
+           :'Ο προϋπολογισμός διαβάστηκε από εικόνα, αλλά δεν επαληθεύεται πλήρως.',
+    d:scan.report};
+   tab='p2'; render(); return;
+  }
   const q=meta.quality;
   const parts=[];
   if(meta.ergo)parts.push('τίτλος έργου');
@@ -2578,9 +2639,22 @@ async function loadBudgetFile(ev){
   tab= q.ok?'p1':'p2'; render();
  }catch(e){
   pdfProgress=null;
-  flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση του αρχείου.',d:e.message||''};
+  if(e&&e.declined){ flashMsg=null; render(); return; }
+  flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση του αρχείου.',
+   d:(e.message||'')+(e&&e.scanned
+     ?'<br><br>Αν το έγγραφο είναι σαρωμένο, συνδεθείτε και δοκιμάστε ξανά: η ανάγνωση εικόνας απαιτεί σύνδεση.':'')};
   tab='p2'; render();
  }
+}
+
+/* Τα γενικά μεγέθη της κεφαλίδας, στη μορφή που περιμένει το applyMeta. */
+function scanMeta(res){
+ const m={};
+ if(res.ergo) m.ergo=String(res.ergo);
+ if(res.geoe!=null) m.geoe=Number(res.geoe);
+ if(res.apr!=null)  m.apr=Number(res.apr);
+ if(res.fpa!=null)  m.fpa=Number(res.fpa);
+ return m;
 }
 function applyMeta(m){
  const p=S.project;
@@ -2756,9 +2830,7 @@ async function loadOfferFile(ev){
  }
  flashMsg={k:'info',t:'Ανάγνωση προσφοράς «'+E(f.name)+'»…',d:''}; render();
  try{
-  let txt;
-  if(/\.pdf$/i.test(f.name)) txt=await pdfToText(await f.arrayBuffer());
-  else txt=await f.text();
+  const txt=await readAnyText(f);
   const o=parseOffer(txt);
   if(!o.isOffer||(!o.rows.length&&!o.pcts.length)){
    flashMsg={k:'b',t:'Δεν αναγνωρίστηκε έντυπο οικονομικής προσφοράς.',
@@ -2782,6 +2854,7 @@ async function loadOfferFile(ev){
      (badN?'<br>Οι ομάδες με ✗ δεν αντιστοιχίστηκαν — ορίστε την έκπτωσή τους χειροκίνητα.':'')};
   tab='p3'; render();
  }catch(e){
+  if(e&&e.declined){ flashMsg=null; render(); return; }
   flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση του αρχείου.',d:e.message||''};
   render();
  }
@@ -3185,9 +3258,7 @@ async function loadDocFile(ev){
  if(!f)return;
  docName=f.name;
  try{
-  let txt;
-  if(/\.pdf$/i.test(f.name)) txt=await pdfToText(await f.arrayBuffer());
-  else txt=await f.text();
+  const txt=await readAnyText(f);
   const F=docScan(txt);
   if(!F.length){
    flashMsg={k:'w',t:'Δεν εντοπίστηκαν αναγνωριστικά στο «'+E(f.name)+'».',
@@ -3199,6 +3270,7 @@ async function loadDocFile(ev){
   regDoc(f.name,docTarget,F,'',3);
   render(); openDocPanel(applied);
  }catch(e){
+  if(e&&e.declined){ flashMsg=null; render(); return; }
   flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση του εγγράφου.',d:e.message||''};
   render();
  }
@@ -3343,12 +3415,13 @@ async function batchImport(ev){
   try{
    let txt;
    if(/\.xlsx$/i.test(f.name)){ txt=(await xlsxToRows(await f.arrayBuffer())).map(r=>r.join('  ')).join('\n'); }
-   else txt=/\.pdf$/i.test(f.name)?await pdfToText(await f.arrayBuffer()):await f.text();
+   else txt=await readAnyText(f);
    const c=classifyDoc(txt);
    const F=docScan(txt);
    c.kind=refineByThema(c.kind,F);
    docs.push({name:f.name,txt,F,...c,gave:[]});
-  }catch(e){ docs.push({name:f.name,kind:'unknown',auth:0,F:[],gave:[],err:e.message||'σφάλμα ανάγνωσης'}); }
+  }catch(e){ docs.push({name:f.name,kind:'unknown',auth:0,F:[],gave:[],
+    err:(e&&e.declined)?'δεν στάλθηκε για ανάγνωση εικόνας':(e.message||'σφάλμα ανάγνωσης')}); }
  }
  /* σειρά επεξεργασίας: πρώτα ο προϋπολογισμός (δημιουργεί τις ομάδες),
     μετά η προσφορά (χρειάζεται τις ομάδες), μετά οι αποφάσεις */
@@ -3754,7 +3827,7 @@ async function loadAuditFile(ev){
  flashMsg={k:'info',t:'Ανάγνωση '+files.length+' αρχείων…',d:''}; render();
  try{
   for(const f of files){
-   const txt=/\.pdf$/i.test(f.name)?await pdfToText(await f.arrayBuffer()):await f.text();
+   const txt=await readAnyText(f);
    const isRev=/ΑΝΑΘΕΩΡΗΣ|Αναθεώρησ/i.test(txt)&&!/Επί πλέον|Επί έλαττον/i.test(txt);
    if(isRev){
     auditFind=auditFind.concat(auditRevision(txt,f.name).map(x=>({...x,src:f.name})));
@@ -3770,7 +3843,10 @@ async function loadAuditFile(ev){
    }
   }
   flashMsg=null; tab='p8'; render();
- }catch(e){ flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση.',d:e.message||''}; render(); }
+ }catch(e){
+  if(e&&e.declined){ flashMsg=null; render(); return; }
+  flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση.',d:e.message||''}; render();
+ }
 }
 function clearAudit(){ auditData=null; auditFind=[]; auditSum=null; auditNames=[]; render(); }
 
@@ -3805,7 +3881,7 @@ function vAudit(){
  const zone=`<div class="card"><h3><span class="pill" style="background:var(--s4)">🔍</span>Έλεγχος έτοιμου Α.Π.Ε.</h3><div class="cb">
   <p class="hint" style="margin:0 0 12px">Φορτώστε τον Ανακεφαλαιωτικό Πίνακα που συνέταξε τρίτος, μαζί με τα φύλλα αναθεώρησης.
    Η εφαρμογή ξαναϋπολογίζει κάθε γραμμή, κάθε άθροισμα και κάθε νόμιμο όριο ανεξάρτητα, και συγκρίνει με τα δηλωθέντα.</p>
-  ${dropZone('audf','Σύρετε εδώ τον Α.Π.Ε. και τα φύλλα αναθεώρησης','PDF ή κείμενο — μπορείτε να επιλέξετε πολλά αρχεία μαζί')}
+  ${dropZone('audf','Σύρετε εδώ τον Α.Π.Ε. και τα φύλλα αναθεώρησης','PDF, κείμενο ή φωτογραφία — μπορείτε να επιλέξετε πολλά αρχεία μαζί')}
   ${auditNames.length?`<div class="note g" style="margin-top:12px"><b>Αναγνώστηκαν:</b><br>${auditNames.map(E).join('<br>')}</div>`:''}
   ${auditFind.length?`<div class="row" style="margin-top:12px">
     <button class="btn c7" onclick="adoptAudit()" ${auditData?'':'disabled'}>✓ Υιοθέτηση στοιχείων &amp; σύνταξη εγγράφων</button>
@@ -4203,6 +4279,160 @@ function workOffline(){
 async function doLogout(){
  if(syncState.pending && !confirm('Υπάρχουν '+syncState.pending+' έργα που δεν έχουν συγχρονιστεί.\n\nΑποσύνδεση;')) return;
  await sbSignOut(); offlineMode=false; showLogin();
+}
+
+/* ══ ΑΝΑΓΝΩΣΗ ΣΑΡΩΜΕΝΩΝ ΚΑΙ ΦΩΤΟΓΡΑΦΙΩΝ ══════════════════════════════
+   Ο τοπικός αναγνώστης βγάζει κείμενο μόνο από PDF που το περιέχουν. Σε
+   σαρωμένο ή φωτογραφημένο έγγραφο η ανάγνωση γίνεται στον διακομιστή, από
+   μοντέλο που καταλαβαίνει δομή πίνακα.
+
+   Δύο πράγματα δεν διαπραγματεύονται:
+   · Το έγγραφο ΔΕΝ φεύγει χωρίς ρητή συγκατάθεση του χρήστη, κάθε φορά.
+   · Κανένας αριθμός δεν μπαίνει σε υπολογισμό χωρίς ανεξάρτητη επαλήθευση:
+     ποσότητα × τιμή ελέγχεται έναντι της δαπάνης που γράφει το ίδιο το χαρτί,
+     και το άθροισμα έναντι του «Αθροίσματος» του εγγράφου. */
+
+const isImage = f => /^image\//.test(f.type||'') || /\.(png|jpe?g|webp|gif)$/i.test(f.name||'');
+
+function fileToBase64(f){
+ return new Promise((res,rej)=>{
+  const r=new FileReader();
+  r.onerror=()=>rej(new Error('Το αρχείο δεν διαβάστηκε.'));
+  r.onload=()=>{ const s=String(r.result); res(s.slice(s.indexOf(',')+1)); };
+  r.readAsDataURL(f);
+ });
+}
+
+function cloudConsent(f){
+ return confirm(
+   'Το «'+f.name+'» δεν περιέχει κείμενο — είναι σαρωμένο ή φωτογραφία.\n\n'
+  +'Για να διαβαστεί, το αρχείο θα σταλεί στην υπηρεσία ανάγνωσης του έργου.\n'
+  +'Φεύγει δηλαδή από τον υπολογιστή σας.\n\n'
+  +'Ό,τι επιστρέψει θα ελεγχθεί αριθμητικά και θα χρειαστεί τον έλεγχό σας\n'
+  +'πριν χρησιμοποιηθεί.\n\nΝα σταλεί;');
+}
+
+const OCR_TIMEOUT=210000;   // ο διακομιστής κόβει νωρίτερα· εδώ μόνο για να μην κρεμάσει η σελίδα
+
+async function cloudRead(f, mode){
+ if(!SB_ON) throw new Error('Δεν έχει ρυθμιστεί η σύνδεση με τη βάση.');
+ if(!sessValid() && !(sbSession && await sbRefresh()))
+   throw new Error('Χρειάζεται σύνδεση για την ανάγνωση σαρωμένων εγγράφων.');
+ const data=await fileToBase64(f);
+ const mime=f.type || (/\.png$/i.test(f.name)?'image/png'
+   :/\.(jpe?g)$/i.test(f.name)?'image/jpeg'
+   :/\.webp$/i.test(f.name)?'image/webp':'application/pdf');
+ const ac=typeof AbortController==='function'?new AbortController():null;
+ const timer=ac?setTimeout(()=>ac.abort(),OCR_TIMEOUT):null;
+ try{
+  return await sbCall('/functions/v1/ocr-pinaka',
+    {method:'POST', signal:ac?ac.signal:undefined,
+     body:JSON.stringify({mime, data, filename:f.name, mode:mode||'pinakas'})});
+ }catch(e){
+  if(e && e.name==='AbortError')
+    throw new Error('Η ανάγνωση άργησε πάνω από '+Math.round(OCR_TIMEOUT/1000)+' δευτερόλεπτα και διακόπηκε. Δοκιμάστε λιγότερες σελίδες τη φορά.');
+  throw e;
+ }finally{ if(timer) clearTimeout(timer); }
+}
+
+/* Ανεξάρτητος έλεγχος: η υπηρεσία επιστρέφει και τη δαπάνη όπως ΓΡΑΦΕΤΑΙ στο
+   χαρτί, χωρίς να την υπολογίσει. Αν ποσότητα × τιμή δεν τη δίνει, κάτι
+   διαβάστηκε λάθος — και το ξέρουμε πριν μπει σε έγγραφο. */
+function verifyCloudRows(res){
+ const groups=[], bad=[], uncertain=[];
+ let sum=0;
+ (res.groups||[]).forEach((g,gi)=>{
+  const items=[];
+  (g.items||[]).forEach((it,ii)=>{
+   const q=Number(it.posotita)||0, t=Number(it.timi)||0, d=Number(it.dapani)||0;
+   const calc=R2(q*t);
+   const where=(g.name||('Ομάδα '+(gi+1)))+' · '+(it.at||('γραμμή '+(ii+1)));
+   if(d>0 && Math.abs(calc-d)>0.02) bad.push({where, q, t, d, calc});
+   if(it.avevaio) uncertain.push(where);
+   sum+=calc;
+   items.push({id:uid(), at:String(it.at||''), kodikos:String(it.kodikos||''),
+     perigrafi:String(it.perigrafi||'(χωρίς περιγραφή)'), kodAnath:String(it.kodAnath||''),
+     monada:String(it.monada||''), posotita:q, timi:t, posotitaApe:q, posotitaPrev:q,
+     ocr:true, ocrAvevaio:!!it.avevaio});
+  });
+  if(items.length) groups.push({id:uid(), name:String(g.name||('Ομάδα '+(gi+1))), discount:0, items});
+ });
+ sum=R2(sum);
+ const declared = res.athroisma==null?null:Number(res.athroisma);
+ const diff = declared==null?null:R2(declared-sum);
+ return {groups, bad, uncertain, sum, declared, diff};
+}
+
+async function readScanned(f){
+ if(!cloudConsent(f)) return null;
+ flashMsg={k:'info',t:'Ανάγνωση «'+E(f.name)+'» με αναγνώριση εικόνας…',
+   d:'Χρειάζεται συνήθως 20–60 δευτερόλεπτα. Μην κλείσετε τη σελίδα.'};
+ render();
+ const res=await cloudRead(f);
+ const v=verifyCloudRows(res);
+ if(!v.groups.length) throw new Error('Δεν αναγνωρίστηκε καμία γραμμή άρθρου.');
+
+ const items=v.groups.reduce((a,g)=>a+g.items.length,0);
+ const parts=[`Αναγνωρίστηκαν <b>${v.groups.length}</b> ομάδες και <b>${items}</b> άρθρα.`];
+
+ if(v.declared!=null){
+  parts.push(Math.abs(v.diff)<=0.02
+   ? `Το άθροισμα <b>${F(v.sum)} €</b> συμφωνεί με το «Άθροισμα» του εγγράφου.`
+   : `<b>⚠ Το άθροισμα δεν συμφωνεί:</b> υπολογίστηκε ${F(v.sum)} € έναντι ${F(v.declared)} € του εγγράφου (διαφορά ${F(Math.abs(v.diff))} €).`);
+ } else {
+  parts.push('<b>⚠ Δεν βρέθηκε «Άθροισμα» στο έγγραφο</b>, οπότε το σύνολο <b>'+F(v.sum)+' €</b> δεν επαληθεύεται. Συγκρίνετέ το με το χαρτί.');
+ }
+ if(v.bad.length){
+  parts.push(`<b>⚠ Σε ${v.bad.length} γραμμές η ποσότητα × τιμή δεν δίνει τη δαπάνη του εγγράφου:</b><br>`
+   + v.bad.slice(0,5).map(b=>`· ${E(b.where)}: ${FQ(b.q)} × ${F(b.t)} = ${F(b.calc)}, το έγγραφο γράφει ${F(b.d)}`).join('<br>')
+   + (v.bad.length>5?`<br>· …και άλλες ${v.bad.length-5}`:''));
+ }
+ if(v.uncertain.length){
+  parts.push(`<b>⚠ ${v.uncertain.length} γραμμές σημειώθηκαν ως αβέβαιες</b> και είναι σημασμένες στο βήμα 2.`);
+ }
+ parts.push('<b>Ελέγξτε τον πίνακα του βήματος 2 πριν προχωρήσετε.</b> Τα ποσά προέρχονται από ανάγνωση εικόνας, όχι από ψηφιακό αρχείο.');
+
+ return {res, v, report:parts.join('<br><br>')};
+}
+
+/* Μεταγραφή σαρωμένου διοικητικού εγγράφου σε κείμενο. Επίτηδες δεν
+   επιστρέφει δομή: το κείμενο περνά από τους ίδιους αναγνώστες (docScan,
+   classifyDoc, parseApeDoc, parseOffer) που είναι ήδη δοκιμασμένοι πάνω σε
+   ψηφιακά PDF, ώστε να μην υπάρχουν δύο διαφορετικοί δρόμοι εξαγωγής. */
+async function readScannedText(f){
+ if(!cloudConsent(f)) return null;
+ flashMsg={k:'info',t:'Ανάγνωση «'+E(f.name)+'» με αναγνώριση εικόνας…',
+   d:'Χρειάζεται συνήθως 20–60 δευτερόλεπτα. Μην κλείσετε τη σελίδα.'};
+ render();
+ const res=await cloudRead(f,'keimeno');
+ const t=String(res.keimeno||'').trim();
+ if(!t) throw new Error('Δεν διαβάστηκε κείμενο από το έγγραφο.');
+ return t;
+}
+
+/* Σφάλμα που σημαίνει «ο χρήστης είπε όχι» — ο καλών το αναγνωρίζει και
+   σταματά αθόρυβα, χωρίς μήνυμα αποτυχίας. */
+function declinedErr(){ const e=new Error('Η αποστολή ακυρώθηκε.'); e.declined=true; return e; }
+
+/* Ενιαία ανάγνωση σε κείμενο, από όπου κι αν προέρχεται το αρχείο:
+   ψηφιακό PDF τοπικά, σαρωμένο PDF ή φωτογραφία στον διακομιστή. */
+async function readAnyText(f){
+ if(isImage(f)){
+  const t=await readScannedText(f);
+  if(t==null) throw declinedErr();
+  return t;
+ }
+ if(/\.pdf$/i.test(f.name)){
+  try{ return await pdfToText(await f.arrayBuffer()); }
+  catch(e){
+   if(!e || !e.scanned) throw e;
+   pdfProgress=null;
+   const t=await readScannedText(f);
+   if(t==null) throw declinedErr();
+   return t;
+  }
+ }
+ return await f.text();
 }
 
 /* ── γραμμή κατάστασης συγχρονισμού ───────────────────────────────── */
