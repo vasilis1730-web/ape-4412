@@ -8,7 +8,7 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const url  = pathToFileURL(path.join(root, 'index.html')).href;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage();
 const errs = [];
 page.on('pageerror', e => errs.push('pageerror: ' + e.message));

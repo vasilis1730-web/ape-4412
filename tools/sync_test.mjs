@@ -28,7 +28,7 @@ try {
   process.exit(1);
 }
 
-const b = await chromium.launch();
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const URL = pathToFileURL(path.join(root, 'index.html')).href;
 const ok=(n,c,x='')=>console.log(`${c?'✅':'❌'} ${n}${x?' — '+x:''}`);
 const login=async(p,email)=>{

@@ -1,0 +1,23 @@
+{
+  "name": "ape-4412",
+  "version": "1.0.0",
+  "description": "Σύνταξη και έλεγχος Ανακεφαλαιωτικών Πινάκων Εργασιών κατά τα άρθρα **153** (αναθεώρηση τιμών) και **156** (τροποποίηση σύμβασης) του **Ν. 4412/2016**.",
+  "main": "config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vasilis1730-web/ape-4412.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vasilis1730-web/ape-4412/issues"
+  },
+  "homepage": "https://github.com/vasilis1730-web/ape-4412#readme",
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

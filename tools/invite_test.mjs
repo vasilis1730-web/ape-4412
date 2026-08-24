@@ -22,7 +22,7 @@ const MOCK='http://127.0.0.1:8899';
 try { await fetch(MOCK+'/__reset',{headers:{apikey:'x'}}); }
 catch { console.error('Ο mock δεν απαντά: node tools/mock/supabase-mock.mjs'); process.exit(1); }
 
-const b = await chromium.launch();
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const BASE = pathToFileURL(path.join(root,'index.html')).href;
 const ok=(n,c,x='')=>{ console.log(`${c?'✅':'❌'} ${n}${x?' — '+x:''}`); if(!c) fails++; };
 let fails=0; const errs=[];

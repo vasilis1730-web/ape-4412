@@ -45,7 +45,7 @@ const DIRTY = JSON.parse(JSON.stringify(CLEAN));
 DIRTY.groups[0].items[1].posotita = 8;
 DIRTY.groups[0].items[1].avevaio  = true;
 
-const b = await chromium.launch();
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const URL = pathToFileURL(path.join(root, 'index.html')).href;
 const ok = (n, c, x='') => { if(!c) fails++; console.log(`${c?'✅':'❌'} ${n}${x?' — '+x:''}`); };
 let fails = 0;
