@@ -206,6 +206,33 @@ label.f>span{display:flex;align-items:center}
 label.f>span .clip{margin-left:auto}
 #modal{display:none;position:fixed;inset:0;background:rgba(16,21,28,.55);z-index:50;
   align-items:center;justify-content:center;padding:28px}
+/* ── οθόνη εκκίνησης: η εφαρμογή ανοίγει ολοκάθαρη και ο χρήστης διαλέγει ── */
+#welcome{display:none;position:fixed;inset:0;background:#182230;z-index:60;
+  align-items:center;justify-content:center;padding:28px;overflow:auto}
+.wbox{max-width:760px;width:100%}
+.wbox .wt{color:#fff;font-size:26px;font-weight:800;letter-spacing:.5px;margin:0 0 4px}
+.wbox .ws{color:#9FB0C3;font-size:13px;margin:0 0 26px;line-height:1.55}
+.wgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px}
+.wcard{background:#202C3D;border:1px solid #31405A;border-radius:12px;padding:18px 16px;cursor:pointer;
+  text-align:left;transition:border-color .15s,transform .15s;color:inherit;font:inherit}
+.wcard:hover{border-color:#5B7DB1;transform:translateY(-2px)}
+.wcard .wi{font-size:26px;display:block;margin-bottom:10px}
+.wcard b{display:block;color:#fff;font-size:14.5px;margin-bottom:6px}
+.wcard span{display:block;color:#9FB0C3;font-size:11.5px;line-height:1.5}
+.wlist{background:#202C3D;border:1px solid #31405A;border-radius:12px;overflow:hidden}
+.wlist>h4{margin:0;padding:11px 16px;color:#C8D4E2;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid #31405A}
+.wrow{display:flex;align-items:center;gap:12px;width:100%;padding:11px 16px;background:transparent;border:0;
+  border-bottom:1px solid #2A3750;cursor:pointer;text-align:left;font:inherit}
+.wrow:last-child{border-bottom:0}
+.wrow:hover{background:#26344A}
+.wrow b{color:#E7EDF5;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wrow span{color:#8296AD;font-size:11px;flex:0 0 auto}
+.wfoot{margin-top:16px;display:flex;gap:16px;align-items:center}
+.wfoot button{background:transparent;border:0;color:#8FA3BB;font-size:12px;cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px;padding:0;font-family:inherit}
+.wfoot button:hover{color:#fff}
+@media(max-width:720px){.wgrid{grid-template-columns:1fr}}
 .mbox{background:#fff;border-radius:12px;max-width:940px;width:100%;max-height:86vh;display:flex;flex-direction:column;
   box-shadow:0 18px 50px rgba(0,0,0,.3)}
 .mbox>h3{margin:0;padding:13px 18px;font-size:14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
@@ -258,6 +285,7 @@ label.f>span .clip{margin-left:auto}
   </div>
 </div>
 <div id="modal"></div>
+<div id="welcome"></div>
 <script>
 /* ══════════════════════════════════════════════════════════════
    ΑΝΑΓΝΩΣΤΗΣ PDF
@@ -990,18 +1018,80 @@ function normalize(d){
 }
 function libNew(name){
  const e={id:uid(),name:name||'Νέο έργο',updated:nowStr(),data:blank()};
- LIB.push(e); curId=e.id; S=e.data; libSave(); return e;
+ LIB.push(e); curId=e.id; S=e.data; libSave();
+ try{ localStorage.setItem(LAST_KEY,e.id); }catch(e2){}
+ return e;
 }
 function libOpen(id){
  libSave();
  const e=LIB.find(x=>x.id===id); if(!e)return;
  curId=id; S=e.data;
+ try{ localStorage.setItem(LAST_KEY,id); }catch(e2){}
 }
 function libDelete(id){
  const i=LIB.findIndex(x=>x.id===id); if(i<0)return;
  LIB.splice(i,1);
  if(curId===id){ if(LIB.length){curId=LIB[0].id;S=LIB[0].data;} else libNew('Νέο έργο'); }
  libSave();
+}
+
+/* ════════════════ ΟΘΟΝΗ ΕΚΚΙΝΗΣΗΣ ════════════════
+   Η εφαρμογή ανοίγει πάντοτε ολοκάθαρη — κανένα έργο δεν φορτώνεται μόνο
+   του. Ο χρήστης διαλέγει ρητά: συνέχεια του τελευταίου έργου, νέο έργο
+   και Α.Π.Ε., έλεγχος Α.Π.Ε. τρίτου, ή άνοιγμα αποθηκευμένου έργου. */
+const LAST_KEY='ape_last_open_v1';
+let welcomeOpen=false;
+function lastEntry(){
+ let id=null; try{ id=localStorage.getItem(LAST_KEY); }catch(e){}
+ const cand=LIB.filter(x=>entryHasContent(x));
+ return cand.find(x=>x.id===id) || cand[cand.length-1] || null;
+}
+function showWelcome(){ welcomeOpen=true; renderWelcome(); }
+function closeWelcome(){ welcomeOpen=false;
+ const el=document.getElementById('welcome'); el.style.display='none'; el.innerHTML=''; }
+function renderWelcome(){
+ if(!welcomeOpen)return;
+ const el=document.getElementById('welcome');
+ const last=lastEntry();
+ const saved=LIB.filter(x=>entryHasContent(x));
+ el.innerHTML=`<div class="wbox">
+  <p class="wt">ΑΠΕ</p>
+  <p class="ws">Ανακεφαλαιωτικοί Πίνακες Εργασιών — σύνταξη και έλεγχος κατά τα άρθρα 153 και 156 του Ν. 4412/2016.<br>Επιλέξτε πώς θέλετε να ξεκινήσετε.</p>
+  <div class="wgrid">
+   ${last?`<button class="wcard" onclick="welcomeChoose('cont')"><span class="wi">▶</span>
+     <b>Συνέχεια τελευταίου έργου</b><span>${E((last.name||'Έργο').slice(0,70))}<br>${E(last.updated||'')}</span></button>`:''}
+   <button class="wcard" onclick="welcomeChoose('new')"><span class="wi">✚</span>
+    <b>Νέο έργο &amp; νέος Α.Π.Ε.</b><span>Καθαρό έργο: προϋπολογισμός, σύμβαση, Ανακεφαλαιωτικός, αναθεώρηση και όλα τα έγγραφα.</span></button>
+   <button class="wcard" onclick="welcomeChoose('audit')"><span class="wi">🔍</span>
+    <b>Έλεγχος Α.Π.Ε. τρίτου</b><span>Εισάγετε τον επίσημο προϋπολογισμό και τον Πίνακα που σας υποβλήθηκε — η εφαρμογή τα διασταυρώνει και βγάζει πόρισμα.</span></button>
+  </div>
+  ${saved.length?`<div class="wlist"><h4>Αποθηκευμένα έργα</h4>
+   ${saved.map(x=>`<button class="wrow" onclick="welcomeChoose('open','${x.id}')">
+     <b>${E((x.name||'Έργο').slice(0,80))}</b><span>${E(x.updated||'')}</span></button>`).join('')}
+  </div>`:''}
+  <div class="wfoot">
+   <button onclick="welcomeChoose('file')">Άνοιγμα έργου από αρχείο (.json)</button>
+  </div>
+ </div>`;
+ el.style.display='flex';
+}
+/* Νέα εκκίνηση: αν το τρέχον έργο είναι ήδη κενό, ξαναχρησιμοποιείται —
+   αλλιώς κάθε άνοιγμα της εφαρμογής θα γέμιζε τη βιβλιοθήκη με άδεια έργα. */
+function ensureFresh(name){
+ const e=LIB.find(x=>x.id===curId);
+ if(e && !entryHasContent(e)){ e.name=name;
+  try{ localStorage.setItem(LAST_KEY,e.id); }catch(e2){}
+  return e; }
+ return libNew(name);
+}
+function welcomeChoose(act,id){
+ closeWelcome(); flashMsg=null;
+ if(act==='cont'){ const e=lastEntry(); if(e){ libOpen(e.id); } else ensureFresh('Νέο έργο'); tab='p1'; }
+ else if(act==='open'&&id){ libOpen(id); tab='p1'; }
+ else if(act==='audit'){ ensureFresh('Έλεγχος Α.Π.Ε. τρίτου'); tab='e1'; }
+ else if(act==='file'){ ensureFresh('Νέο έργο'); tab='p1'; render(); document.getElementById('loadf').click(); return; }
+ else { ensureFresh('Νέο έργο'); tab='p1'; }
+ render();
 }
 
 /* ════════════════ ΜΗΧΑΝΗ ΥΠΟΛΟΓΙΣΜΩΝ ════════════════ */
@@ -1336,6 +1426,7 @@ function renderTop(){
 /* ════════════════ ΚΥΡΙΑ ΑΠΟΔΟΣΗ ════════════════ */
 function render(){renderNav();renderProjBar();renderTop();renderMeters();
  if(typeof renderSyncBar==='function') renderSyncBar();
+ if(welcomeOpen) renderWelcome();
  $('content').innerHTML=(typeof flashHTML==='function'?flashHTML():'')+
   ({p1:vProject,p2:vBudget,p3:vContract,p4:vApe,p5:vAnath,p6:vCheck,p7:vDocs,
     e1:vAud1,e2:vAud2,e3:vAud3,e4:vAud4}[tab]||vProject)();}
@@ -1542,8 +1633,8 @@ function ocrPending(){
 }
 function ocrBanner(){
  const n=ocrPending();
- return `<div id="ocrbanner">${n?`<div class="note w"><b>${n} ${n===1?'γραμμή διαβάστηκε':'γραμμές διαβάστηκαν'} από εικόνα χωρίς βεβαιότητα.</b><br>`
-  +'Είναι σημασμένες με ⚠ και με κίτρινο φόντο. Αντιπαραβάλετέ τις με το χαρτί· '
+ return `<div id="ocrbanner">${n?`<div class="note w"><b>${n} ${n===1?'γραμμή χρειάζεται':'γραμμές χρειάζονται'} τον έλεγχό σας — ανάγνωση χωρίς βεβαιότητα ή αριθμητική που δεν επαληθεύεται.</b><br>`
+  +'Είναι σημασμένες με ⚠ και με κίτρινο φόντο. Αντιπαραβάλετέ τις με το έντυπο· '
   +'η σήμανση φεύγει μόλις διορθώσετε ή επιβεβαιώσετε τη γραμμή.</div>':''}</div>`;
 }
 /* Το πλήκτρο πληκτρολογείται πάνω στη γραμμή· δεν γίνεται πλήρες render για να
@@ -2149,7 +2240,7 @@ function docEis(c,D){
   <li>Τις αποφάσεις παράτασης: ${ph(p.paratasis,'…')}.</li>
   <li>Τον ${p.apeNo||1}ο Ανακεφαλαιωτικό Πίνακα Εργασιών και τη συνοδεύουσα Αιτιολογική Έκθεση.</li>
   ${c.tsNeeded?`<li>Την ${p.apofTS?'υπ’ αριθ. '+E(p.apofTS):'<span class="ph">[πρακτικό / πράξη / θέμα]</span>'} γνώμη του ${E(p.texnikoSymvoulio)}.</li>`:''}
-  <li>Τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως ισχύουν.</li>
+  <li>Τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως τροποποιήθηκαν και ισχύουν (ιδίως με τον Ν. 4782/2021).</li>
  </ul>
  <p>Η Υπηρεσία μας συνέταξε τον ${p.apeNo||1}ο Ανακεφαλαιωτικό Πίνακα Εργασιών προκειμένου να συμπεριλάβει τις αυξομειώσεις των ποσοτήτων που προέκυψαν από τις αναλυτικές επιμετρήσεις κατά την εκτέλεση του έργου${c.anathApe?', καθώς και τη δαπάνη αναθεώρησης τιμών':''}.</p>
  ${p.aitiologia?`<p>${E(p.aitiologia).replace(/\n/g,'</p><p>')}</p>`:''}
@@ -2459,9 +2550,29 @@ function parseMeta(raw){
 /* Ο πίνακας του ErgoLand τυπώνει τη γραμμή με τους αριθμούς ΠΡΩΤΗ και συνεχίζει
    την περιγραφή στις επόμενες γραμμές. Ο αναγνώστης προσαρτά κάθε γραμμή χωρίς
    αριθμητική κατάληξη στο άρθρο που προηγήθηκε. */
+/* Τα αρχεία προϋπολογισμού διαφέρουν σε στήλες και διάταξη. Όταν η γραμμή δεν
+   επαληθεύεται (ποσότητα × τιμή ≠ δαπάνη), αναζητείται σε ΟΛΟΥΣ τους αριθμούς
+   της γραμμής το ζεύγος που πολλαπλασιαζόμενο δίνει τη δαπάνη — τον τελευταίο
+   αριθμό, που τυπώνεται πάντοτε στο τέλος. Προτιμάται ο συνδυασμός που
+   συμφωνεί με τις στήλες που είχαν αναγνωριστεί, και ο δεξιότερος. */
+function fixRow(vals,q0,p0){
+ if(vals.length<3)return null;
+ const c=vals[vals.length-1]; if(!(c>0))return null;
+ const cand=[];
+ for(let i=0;i<vals.length-1;i++)for(let j=i+1;j<vals.length-1;j++){
+  if(!(vals[i]>0)||!(vals[j]>0))continue;
+  if(Math.abs(R2(vals[i]*vals[j])-c)<=0.02)
+   cand.push({q:vals[i],p:vals[j],c,
+     score:(Math.abs(vals[j]-p0)<=0.005?2:0)+(Math.abs(vals[i]-q0)<=0.005?1:0)+j*0.01+i*0.001});
+ }
+ if(!cand.length)return null;
+ cand.sort((a,b)=>b.score-a.score||0);
+ return cand[0];
+}
 function parseBudget(txt){
  const raw=txt.split(/\r?\n/);
  const groups=[]; const meta=parseMeta(raw);
+ const arith={n:0,ok:0,fix:0,bad:0,fixed:[],rows:[]};
  let cur=null, item=null, inHeader=false, justOpened=false, hdrLines=0;
 
  const close=()=>{
@@ -2514,6 +2625,18 @@ function parseBudget(txt){
    if(TAIL.test(L)||GRPH.test(L)||hdrLines>12) inHeader=false;
    else return;
   }
+  /* Γραμμή «Σύνολο» ομάδας: καταγράφεται ως άθροισμα ελέγχου της ομάδας, ώστε
+     τυχόν χαμένες γραμμές να εντοπίζονται ΣΤΗ συγκεκριμένη ομάδα και όχι μόνο
+     στο γενικό άθροισμα. Δεκτή μόνο τιμή κοντά στο τρέχον άθροισμα (0,5×–1,5×),
+     για να μην μπερδευτεί με σύνολα που περιέχουν Γ.Ε.&Ο.Ε. ή μεταφορές. */
+  if(cur&&cur.items.length&&/^(Μερικό\s+)?Σύνολο(?=[\s:])(?!\s+σε)/i.test(L)&&!/ΓΕΝΙΚΟ/i.test(L)){
+   const q=L.match(/([\d.]*\d,\d{2})\s*$/);
+   if(q){
+    const v=gr(q[1]);
+    const s=cur.items.reduce((a,it)=>a+R2((Number(it.posotita)||0)*(Number(it.timi)||0)),0);
+    if(s>0&&v>=s*0.5&&v<=s*1.5){ if(cur.checkSum==null)cur.checkSum=v; close(); cur=null; return; }
+   }
+  }
   if(SKIP.test(L)){close();return;}
 
   const t=L.match(TAIL);
@@ -2522,6 +2645,16 @@ function parseBudget(txt){
    if(!cur){cur={id:uid(),name:'Ομάδα 1',discount:0,items:[]};groups.push(cur);}
    item={id:uid(),at:t[1],monada:t[2],posotita:gr(t[3]),timi:gr(t[4]),
          _buf:[L.slice(0,t.index)]};
+   /* Διασταύρωση της γραμμής: ποσότητα × τιμή = δαπάνη (ο τελευταίος αριθμός).
+      Σε αποτυχία δοκιμάζεται ανασύνθεση από όλους τους αριθμούς της γραμμής·
+      αν ούτε αυτή βγάλει συνεπές ζεύγος, η γραμμή σημαίνεται προς έλεγχο. */
+   const dap=gr(t[5]); arith.n++;
+   if(Math.abs(R2(item.posotita*item.timi)-dap)<=0.02) arith.ok++;
+   else{
+    const fx=fixRow(nums(L).map(x=>x.v),item.posotita,item.timi);
+    if(fx){ item.posotita=fx.q; item.timi=fx.p; arith.fix++; arith.fixed.push(t[1]); }
+    else { item.ocrAvevaio=true; arith.bad++; arith.rows.push(t[1]); }
+   }
    item.posotitaApe=item.posotita;
    cur.items.push(item); justOpened=true; return;
   }
@@ -2540,6 +2673,7 @@ function parseBudget(txt){
  meta.parsedWorks=R2(sum);
  meta.diff=(meta.works!=null)?R2(meta.works-R2(sum)):null;
  meta.badChars=badCharStats(txt);
+ meta.arith=arith;
  meta.quality=importQuality(gs,meta);
  return{groups:gs,meta};
 }
@@ -2582,6 +2716,44 @@ function importQuality(gs,meta){
    t:meta.badChars.n+' χαρακτήρες του PDF δεν αποκωδικοποιήθηκαν και εμφανίζονται ως «\uFFFD».',
    d:'Η γραμματοσειρά του αρχείου δηλώνει ελλιπή πίνακα χαρακτήρων. Τα ποσά και οι κωδικοί δεν επηρεάζονται, '
     +'αλλά ο τίτλος του έργου, τα ονόματα των ομάδων και οι περιγραφές χρειάζονται χειροκίνητο έλεγχο στο βήμα 2.'});
+ /* ── επιπλέον διασταυρώσεις περιεχομένου ── */
+ /* 1. Αριθμητική κάθε γραμμής (ποσότητα × τιμή = δαπάνη). */
+ const ar=meta.arith;
+ if(ar&&ar.n){
+  q.arith=ar;
+  if(ar.bad) q.issues.push({sev:'bad',
+    t:ar.bad+(ar.bad===1?' γραμμή δεν επαληθεύεται':' γραμμές δεν επαληθεύονται')+' αριθμητικά (ποσότητα × τιμή ≠ δαπάνη).',
+    d:'Α.Τ.: '+ar.rows.slice(0,10).join(', ')+(ar.rows.length>10?'…':'')
+     +' — είναι σημασμένες με ⚠ στο βήμα 2· αντιπαραβάλετέ τις με το έντυπο.'});
+  if(ar.fix) q.issues.push({sev:'warn',
+    t:ar.fix+(ar.fix===1?' γραμμή διορθώθηκε':' γραμμές διορθώθηκαν')+' αυτόματα από τη δαπάνη τους.',
+    d:'Οι στήλες δεν ήταν στην αναμενόμενη θέση. Η εφαρμογή επέλεξε τον συνδυασμό ποσότητας και τιμής που επαληθεύει τη δαπάνη της γραμμής. Α.Τ.: '
+     +ar.fixed.slice(0,10).join(', ')+(ar.fixed.length>10?'…':'')});
+ }
+ /* 2. Άθροισμα ελέγχου ανά ομάδα — εντοπίζει χαμένες γραμμές στη σωστή ομάδα. */
+ q.grpChecked=0;
+ gs.forEach(g=>{
+  if(g.checkSum==null)return;
+  const s=R2(g.items.reduce((a,it)=>a+R2((Number(it.posotita)||0)*(Number(it.timi)||0)),0));
+  if(Math.abs(s-g.checkSum)>0.02) q.issues.push({sev:'bad',
+    t:'Η ομάδα «'+g.name+'» αθροίζει '+F(s)+' € ενώ το αρχείο γράφει '+F(g.checkSum)+' €.',
+    d:'Η διαφορά '+F(Math.abs(s-g.checkSum))+' € εντοπίζεται μέσα στη συγκεκριμένη ομάδα — ελέγξτε τις γραμμές της στο βήμα 2.'});
+  else q.grpChecked++;
+ });
+ /* 3. Συνέχεια και μοναδικότητα των Α.Τ. — κενά σημαίνουν χαμένες γραμμές. */
+ const ats=items.map(it=>String(it.at||'').trim()).filter(Boolean);
+ const dup=[...new Set(ats.filter((a,i)=>ats.indexOf(a)!==i))];
+ if(dup.length) q.issues.push({sev:'warn',
+   t:'Το ίδιο Α.Τ. εμφανίζεται σε περισσότερες γραμμές: '+dup.slice(0,8).join(', ')+(dup.length>8?'…':''),
+   d:'Ελέγξτε μήπως η ίδια γραμμή διαβάστηκε δύο φορές ή μπερδεύτηκαν οι στήλες.'});
+ const ints=ats.filter(a=>/^\d+$/.test(a)).map(Number);
+ if(ints.length>=5&&ints.length===ats.length){
+  const set=new Set(ints), lo=Math.min(...ints), hi=Math.max(...ints), missing=[];
+  for(let x=lo;x<=hi&&missing.length<9;x++) if(!set.has(x)) missing.push(x);
+  if(missing.length) q.issues.push({sev:'warn',
+    t:'Η αρίθμηση των Α.Τ. έχει κενά — δεν βρέθηκαν τα: '+missing.join(', ')+(missing.length===9?'…':''),
+    d:'Πιθανόν χάθηκαν γραμμές κατά την ανάγνωση. Συγκρίνετε με το έντυπο πριν προχωρήσετε.'});
+ }
  q.ok=!q.issues.some(x=>x.sev==='bad');
  return q;
 }
@@ -2592,6 +2764,9 @@ function qualityHTML(q){
   +`<br><b>Κάλυψη στηλών:</b>`
   +line('Α.Τ.',q.atPct,90)+line('κωδ. άρθρου',q.codePct,80)
   +line('κωδ. αναθεώρησης',q.revPct,80)+line('μονάδα',q.unitPct,90)
+  +(q.arith&&q.arith.n?`<br>· αριθμητική γραμμών (ποσότητα × τιμή = δαπάνη): <b>${q.arith.ok+q.arith.fix}/${q.arith.n}</b> επαληθευμένες`
+    +(q.arith.fix?` (${q.arith.fix} με αυτόματη διόρθωση)`:''):'')
+  +(q.grpChecked?`<br>· αθροίσματα ομάδων: <b>${q.grpChecked}</b> επαληθεύτηκαν από το ίδιο το αρχείο`:'')
   +(q.issues.length?'<br><br>'+q.issues.map(x=>
       `<b>${x.sev==='bad'?'⚠':'·'} ${E(x.t)}</b>${x.d?'<br>'+E(x.d):''}`).join('<br>'):'');
 }
@@ -2675,16 +2850,23 @@ async function loadBudgetFile(ev){
    /* Μηδενίζονται μόνο όσα προέρχονται από τον προϋπολογισμό. Ο τίτλος, τα
       πρόσωπα, οι αποφάσεις και το μητρώο εγγράφων είναι δουλειά του χρήστη
       και δεν τα αγγίζει η φόρτωση αρχείου. */
-   const keepProject=S.project, keepDocs=S.docs, keepChecks=S.checks;
-   S=blank(); S.project=keepProject; S.docs=keepDocs; S.checks=keepChecks;
+   const keepProject=S.project, keepDocs=S.docs, keepChecks=S.checks, keepAudit=S.audit;
+   S=blank(); S.project=keepProject; S.docs=keepDocs; S.checks=keepChecks; S.audit=keepAudit;
    if(curId){const e=LIB.find(x=>x.id===curId); if(e)e.data=S;} }
   if(!groups.length){
    flashMsg={k:'b',t:'Δεν αναγνωρίστηκε κανένα άρθρο στο «'+E(f.name)+'».',
      d:'Το αρχείο μπορεί να είναι σαρωμένη εικόνα ή να έχει ασυνήθιστη διάταξη. Δοκιμάστε την επικόλληση κειμένου παρακάτω.'};
-   tab='p2'; render(); return;
+   tab=isAudit()?'e2':'p2'; render(); return;
   }
   pdfProgress=null;
   applyMeta(meta); S.groups=groups;
+  /* Σε λειτουργία ελέγχου, τα ευρήματα ξαναϋπολογίζονται πάνω στη νέα
+     επίσημη βάση, ώστε η διασταύρωση να αφορά πάντα τα τρέχοντα στοιχεία. */
+  if(S.audit&&S.audit.data){
+   const R=auditApe(S.audit.data);
+   S.audit.findings=R.findings.concat(S.audit.findings.filter(x=>x.area==='Αναθεώρηση'||x.area==='Ανάγνωση'));
+   S.audit.summary=R.summary;
+  }
   if(scan){
    const clean = !scan.v.bad.length && !scan.v.uncertain.length
      && scan.v.declared!=null && Math.abs(scan.v.diff)<=0.02;
@@ -2694,7 +2876,7 @@ async function loadBudgetFile(ev){
     t:clean?'Ο προϋπολογισμός διαβάστηκε από εικόνα και επαληθεύτηκε αριθμητικά.'
            :'Ο προϋπολογισμός διαβάστηκε από εικόνα, αλλά δεν επαληθεύεται πλήρως.',
     d:scan.report};
-   tab='p2'; render(); return;
+   tab=isAudit()?'e2':'p2'; render(); return;
   }
   const q=meta.quality;
   const parts=[];
@@ -2712,14 +2894,14 @@ async function loadBudgetFile(ev){
   flashMsg = q.ok
    ? {k:'g',t:'Ο προϋπολογισμός φορτώθηκε και επαληθεύτηκε.',d:detail}
    : {k:'w',t:'Ο προϋπολογισμός διαβάστηκε, αλλά χρειάζεται έλεγχος πριν προχωρήσετε.',d:detail};
-  tab= q.ok?'p1':'p2'; render();
+  tab=isAudit()?'e2':(q.ok?'p1':'p2'); render();
  }catch(e){
   pdfProgress=null;
   if(e&&e.declined){ flashMsg=null; render(); return; }
   flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση του αρχείου.',
    d:(e.message||'')+(e&&e.scanned
      ?'<br><br>Αν το έγγραφο είναι σαρωμένο, συνδεθείτε και δοκιμάστε ξανά: η ανάγνωση εικόνας απαιτεί σύνδεση.':'')};
-  tab='p2'; render();
+  tab=isAudit()?'e2':'p2'; render();
  }
 }
 
@@ -2902,7 +3084,7 @@ async function loadOfferFile(ev){
  if(!S.groups.length){
   flashMsg={k:'w',t:'Φορτώστε πρώτα τον προϋπολογισμό.',
    d:'Οι εκπτώσεις της προσφοράς αντιστοιχίζονται στις ομάδες εργασιών του προϋπολογισμού.'};
-  tab='p2'; render(); return;
+  tab=isAudit()?'e2':'p2'; render(); return;
  }
  flashMsg={k:'info',t:'Ανάγνωση προσφοράς «'+E(f.name)+'»…',d:''}; render();
  try{
@@ -2911,9 +3093,14 @@ async function loadOfferFile(ev){
   if(!o.isOffer||(!o.rows.length&&!o.pcts.length)){
    flashMsg={k:'b',t:'Δεν αναγνωρίστηκε έντυπο οικονομικής προσφοράς.',
     d:'Το αρχείο δεν περιέχει πίνακα ποσοστών έκπτωσης ανά ομάδα. Μπορείτε να συμπληρώσετε τις εκπτώσεις χειροκίνητα στο βήμα 3.'};
-   tab='p3'; render(); return;
+   tab=isAudit()?'e2':'p3'; render(); return;
   }
   const rep=applyOffer(o);
+  if(S.audit&&S.audit.data){
+   const RA=auditApe(S.audit.data);
+   S.audit.findings=RA.findings.concat(S.audit.findings.filter(x=>x.area==='Αναθεώρηση'||x.area==='Ανάγνωση'));
+   S.audit.summary=RA.summary;
+  }
   const okN=rep.filter(r=>r.ok).length, badN=rep.filter(r=>!r.ok).length;
   const c=calc();
   const chk=[];
@@ -2928,7 +3115,7 @@ async function loadOfferFile(ev){
    d:(o.anadoxos?'<b>Ανάδοχος:</b> '+E(o.anadoxos)+(o.prosforaAA?' — Α/Α προσφοράς '+E(o.prosforaAA):'')+'<br>':'')+
      lines+(chk.length?'<br><b>Διασταύρωση:</b> '+chk.join(' · '):'')+
      (badN?'<br>Οι ομάδες με ✗ δεν αντιστοιχίστηκαν — ορίστε την έκπτωσή τους χειροκίνητα.':'')};
-  tab='p3'; render();
+  tab=isAudit()?'e2':'p3'; render();
  }catch(e){
   if(e&&e.declined){ flashMsg=null; render(); return; }
   flashMsg={k:'b',t:'Δεν ήταν δυνατή η ανάγνωση του αρχείου.',d:e.message||''};
@@ -3737,9 +3924,80 @@ function solveArticle(N){
  return{qc,qa,price,costC:R2(costC),costA:R2(costA),delta:R2(costA-costC),decl:v.slice()};
 }
 
+/* ── διασταύρωση με τον επίσημο προϋπολογισμό ──
+   Ο επίσημος προϋπολογισμός της δημοπράτησης και η οικονομική προσφορά του
+   Ε.Σ.Η.ΔΗ.Σ. είναι πάντοτε ορθά — τα έχουμε από τον διαγωνισμό. Ό,τι
+   δηλώνει ο ελεγχόμενος Πίνακας αντιπαραβάλλεται άρθρο-άρθρο με αυτά:
+   τιμή μονάδας, συμβατική ποσότητα, εκπτώσεις ομάδων, ποσοστά, συμβατικό
+   ποσό. Το ίδιο ισχύει για στοιχεία από έγγραφα με ΑΔΑ / ΑΔΑΜ. */
+function auditCross(D){
+ const f=[], add=(sev,what,decl,calc,note)=>f.push({sev,area:'Διασταύρωση',what,decl,calc,note:note||''});
+ const off=[]; S.groups.forEach(g=>g.items.forEach(it=>{ if(!it.isNew) off.push({
+   at:String(it.at||'').trim(), timi:Number(it.timi)||0, pos:Number(it.posotita)||0,
+   perigrafi:it.perigrafi||'', used:false}); }));
+ if(!off.length){
+  add('warn','Δεν φορτώθηκε ο επίσημος προϋπολογισμός του έργου','—','—',
+   'Ο έλεγχος έγινε μόνο με εσωτερικές διασταυρώσεις του ίδιου του Πίνακα. Φορτώστε τον επίσημο προϋπολογισμό της δημοπράτησης (κάρτα Α του βήματος 2) για πλήρη αντιπαραβολή με τα επίσημα στοιχεία.');
+  return f;
+ }
+ let bad=0, matched=0;
+ const un=[];
+ /* 1ο πέρασμα: ταύτιση κατά Α.Τ. — 2ο πέρασμα: κατά τιμή και ποσότητα,
+    για αρχεία που τυπώνουν τα Α.Τ. με διαφορετική μορφή. */
+ D.articles.forEach(a=>{
+  const at=String(a.at||'').trim();
+  let o=off.find(x=>!x.used&&x.at===at);
+  if(!o) o=off.find(x=>!x.used&&near(x.timi,a.price,0.005)&&near(x.pos,a.qc,0.005));
+  if(!o){ un.push(a); return; }
+  o.used=true; matched++;
+  if(!near(a.price,o.timi,0.005)){ bad++;
+   add('err','Α.Τ. '+at+': τιμή μονάδας εκτός επίσημου τιμολογίου',F(a.price),F(o.timi),
+    'Η τιμή μονάδας της σύμβασης δεν επιτρέπεται να μεταβληθεί σε Α.Π.Ε. (πλην νέων εργασιών με Π.Κ.Τ.Μ.Ν.Ε.).'); }
+  if(!near(a.qc,o.pos,0.005)){ bad++;
+   add('err','Α.Τ. '+at+': συμβατική ποσότητα διαφορετική από την εγκεκριμένη',F(a.qc),F(o.pos),
+    'Η στήλη της σύμβασης πρέπει να ταυτίζεται με τον εγκεκριμένο προϋπολογισμό της δημοπράτησης.'); }
+ });
+ un.forEach(a=>{ add('warn','Α.Τ. '+a.at+': δεν αντιστοιχίζεται στον επίσημο προϋπολογισμό',
+   F(a.price)+' € / '+F(a.qc),'—',
+   'Αν πρόκειται για νέα εργασία απαιτείται Π.Κ.Τ.Μ.Ν.Ε.· αλλιώς ελέγξτε την αντιστοίχιση των Α.Τ.'); });
+ const missing=off.filter(x=>!x.used);
+ if(missing.length) add('err','Άρθρα της σύμβασης λείπουν από τον Πίνακα',
+  missing.length+' άρθρα','0',
+  'Α.Τ.: '+missing.slice(0,10).map(x=>x.at||'—').join(', ')+(missing.length>10?'…':'')
+  +' — ο Α.Π.Ε. περιλαμβάνει ΟΛΑ τα συμβατικά άρθρα, και με μηδενική ποσότητα.');
+ /* εκπτώσεις ομάδων κατά την οικονομική προσφορά */
+ if(S.groups.length===D.groups.length){
+  D.groups.forEach((g,i)=>{
+   const od=Number(S.groups[i].discount)||0;
+   if(g.discount!=null&&Math.abs(g.discount-od)>0.005){ bad++;
+    add('err','Ομάδα '+(i+1)+': έκπτωση διαφορετική από την οικονομική προσφορά',
+     P(g.discount),P(od),'Οι εκπτώσεις προκύπτουν από την επίσημη οικονομική προσφορά του διαγωνισμού και δεν μεταβάλλονται.'); }
+  });
+ }
+ /* ποσοστά και συμβατικό ποσό κατά τα επίσημα στοιχεία */
+ const c=calc();
+ if(D.fin.geoeRate!=null&&S.project.geoe&&Math.abs(D.fin.geoeRate-S.project.geoe)>0.005){ bad++;
+  add('err','Ποσοστό Γ.Ε. & Ο.Ε. διαφορετικό από το επίσημο',P(D.fin.geoeRate),P(S.project.geoe)); }
+ if(D.fin.fpaRate!=null&&S.project.fpa&&Math.abs(D.fin.fpaRate-S.project.fpa)>0.005){ bad++;
+  add('err','Συντελεστής Φ.Π.Α. διαφορετικός από τον επίσημο',P(D.fin.fpaRate),P(S.project.fpa)); }
+ if(D.fin.symC!=null&&c.symCon>0&&!near(D.fin.symC,c.symCon,0.05)){ bad++;
+  add('err','Δηλωθέν συμβατικό ποσό εκτός επίσημης σύμβασης',F(D.fin.symC),F(c.symCon),
+   'Το συμβατικό ποσό προκύπτει από τον επίσημο προϋπολογισμό με τις εκπτώσεις της οικονομικής προσφοράς — δεν αποτελεί επιλογή του συντάκτη.'); }
+ if(!bad&&matched){
+  add('ok','Διασταύρωση '+matched+' άρθρων με τον επίσημο προϋπολογισμό','σύμφωνα','σύμφωνα',
+   'Τιμές μονάδας, συμβατικές ποσότητες'+(S.groups.length===D.groups.length?', εκπτώσεις ομάδων':'')+' και συμβατικό ποσό συμφωνούν με τα επίσημα στοιχεία της δημοπράτησης.');
+ }
+ const adaDocs=(S.docs||[]).filter(d=>d.ada||d.adam);
+ if(adaDocs.length) add('ok','Στοιχεία ταυτότητας από έγγραφα με ΑΔΑ / ΑΔΑΜ',
+  adaDocs.length+' έγγραφα','αξιόπιστα',
+  'Τίτλος, αποφάσεις και συμβατικά στοιχεία που προέρχονται από αναρτημένα έγγραφα (ΔΙΑΥΓΕΙΑ / ΚΗΜΔΗΣ) θεωρούνται ακριβή και δεν χρειάζονται περαιτέρω έλεγχο.');
+ return f;
+}
+
 /* ── έλεγχος ── */
 function auditApe(D){
  const f=[], add=(sev,area,what,decl,calc,note)=>f.push({sev,area,what,decl,calc,note:note||''});
+ auditCross(D).forEach(x=>f.push(x));
  const geoe=(D.fin.geoeRate!=null?D.fin.geoeRate:18)/100;
  const fpa=(D.fin.fpaRate!=null?D.fin.fpaRate:24)/100;
 
@@ -3783,10 +4041,15 @@ function auditApe(D){
  }
  if(fin.aprC!=null&&fin.aprA!=null&&fin.symC!=null){
   const rate=fin.symC?R2((fin.aprC/(fin.symC-fin.aprC))*100):0;
-  if(!near(rate,9,0.6)&&!near(rate,15,0.6))
-   add('warn','Οικονομικά','Ποσοστό απροβλέπτων',P(rate),'9% ή 15%',
-    'Το άρθρο 156 §3β΄ ορίζει 9% για έργα άνω των ενωσιακών ορίων και 15% για τα υπόλοιπα.');
-  else add('ok','Οικονομικά','Ποσοστό απροβλέπτων',P(rate),P(rate));
+  if(near(rate,15,0.6))
+   add('ok','Οικονομικά','Ποσοστό απροβλέπτων',P(rate),'15%',
+    'Σύμφωνο με το άρθρο 156 §3β΄ για έργα κάτω των ενωσιακών ορίων.');
+  else if(near(rate,9,0.6))
+   add('warn','Οικονομικά','Ποσοστό απροβλέπτων',P(rate),'15%',
+    'Το 9% προβλέπεται μόνο για έργα ΑΝΩ των ενωσιακών ορίων· για έργα κάτω των ορίων το άρθρο 156 §3β΄ ορίζει 15%. Επιβεβαιώστε την κατηγορία του έργου.');
+  else
+   add('warn','Οικονομικά','Ποσοστό απροβλέπτων',P(rate),'15%',
+    'Το άρθρο 156 §3β΄ ορίζει 15% για έργα κάτω των ενωσιακών ορίων (9% για τα άνω των ορίων).');
  }
  if(fin.netA!=null&&fin.symA!=null){
   const n=R2(fin.symA+(fin.apol||0)+(fin.anathA||0));
@@ -3918,6 +4181,15 @@ function auditRevision(txt,name){
 async function loadAuditFile(ev){
  const files=[...(ev.target.files||[])]; ev.target.value='';
  if(!files.length)return;
+ /* Προηγείται πάντοτε ο επίσημος προϋπολογισμός της δημοπράτησης — αυτόν τον
+    έχουμε πάντα και είναι πάντα σωστός. Χωρίς αυτόν ο έλεγχος περιορίζεται
+    στις εσωτερικές διασταυρώσεις, οπότε ο χρήστης προειδοποιείται ρητά. */
+ if(!S.groups.length&&!confirm(
+   'Δεν έχει φορτωθεί ο επίσημος προϋπολογισμός του έργου.\n\n'
+  +'Ο πλήρης έλεγχος προϋποθέτει πρώτα τον προϋπολογισμό της δημοπράτησης και την '
+  +'οικονομική προσφορά (κάρτα Α), ώστε κάθε τιμή και ποσότητα του Πίνακα να '
+  +'αντιπαραβληθεί με τα επίσημα στοιχεία.\n\n'
+  +'Συνέχεια ΧΩΡΙΣ τον επίσημο προϋπολογισμό;'))return;
  flashMsg={k:'info',t:'Ανάγνωση '+files.length+' αρχείων…',d:''}; render();
  const A=S.audit;
  try{
@@ -3992,19 +4264,21 @@ function adoptAudit(){
  libSave(); go('p4');
 }
 
-/* ── τα πέντε βήματα του ελέγχου, με εξήγηση της μεθόδου του καθενός ── */
+/* ── τα έξι βήματα του ελέγχου, με εξήγηση της μεθόδου του καθενός ── */
 const AUD_STEPS=[
  {area:'Ανάγνωση',t:'Ανάγνωση αρχείων',
   d:'Προβλήματα κατά την ανάγνωση των αρχείων — δεν αφορούν την ορθότητα του Πίνακα.'},
- {area:'Άρθρα',t:'Βήμα 1 — Αριθμητική άρθρων',
+ {area:'Διασταύρωση',t:'Βήμα 1 — Διασταύρωση με τον επίσημο προϋπολογισμό',
+  d:'Ο Πίνακας αντιπαραβάλλεται άρθρο-άρθρο με τον επίσημο προϋπολογισμό της δημοπράτησης και την οικονομική προσφορά: τιμές μονάδας, συμβατικές ποσότητες, εκπτώσεις ομάδων, ποσοστά και συμβατικό ποσό. Τα επίσημα στοιχεία (δημοπράτηση, σύμβαση, έγγραφα με ΑΔΑ / ΑΔΑΜ) θεωρούνται πάντοτε ορθά και αποτελούν το μέτρο του ελέγχου.'},
+ {area:'Άρθρα',t:'Βήμα 2 — Αριθμητική άρθρων',
   d:'Για κάθε άρθρο επαληθεύεται ότι ποσότητα × τιμή μονάδας = δαπάνη, τόσο στη στήλη της σύμβασης όσο και στη στήλη του Α.Π.Ε.'},
- {area:'Ομάδες',t:'Βήμα 2 — Αθροίσματα ομάδων & εκπτώσεις',
+ {area:'Ομάδες',t:'Βήμα 3 — Αθροίσματα ομάδων & εκπτώσεις',
   d:'Το άθροισμα κάθε ομάδας επανυπολογίζεται από τις γραμμές της και το ποσό της έκπτωσης από το ποσοστό της.'},
- {area:'Οικονομικά',t:'Βήμα 3 — Οικονομική ανακεφαλαίωση',
+ {area:'Οικονομικά',t:'Βήμα 4 — Οικονομική ανακεφαλαίωση',
   d:'Η ανακεφαλαίωση ξαναχτίζεται από κάτω προς τα πάνω: εργασίες → Γ.Ε. & Ο.Ε. → απρόβλεπτα → σύνολο χωρίς Φ.Π.Α. → Φ.Π.Α. → γενικό σύνολο.'},
- {area:'Νομιμότητα',t:'Βήμα 4 — Όρια του άρθρου 156',
+ {area:'Νομιμότητα',t:'Βήμα 5 — Όρια του άρθρου 156',
   d:'Τα όρια υπολογίζονται ανεξάρτητα από τις μεταβολές των άρθρων: 20% «επί έλασσον» ανά ομάδα, 10% μεταφορές μεταξύ ομάδων, 15% συμβατική μεταβολή, επάρκεια του κονδυλίου απροβλέπτων, ανάγκη γνώμης Τεχνικού Συμβουλίου.'},
- {area:'Αναθεώρηση',t:'Βήμα 5 — Αναθεώρηση τιμών (άρθρο 153)',
+ {area:'Αναθεώρηση',t:'Βήμα 6 — Αναθεώρηση τιμών (άρθρο 153)',
   d:'Στα φύλλα αναθεώρησης ελέγχονται ο σταθερός συντελεστής σ = σ₁ + 0,01·ν (με ανώτατη τιμή 0,20) και ότι η δαπάνη πολλαπλασιάστηκε με (1 − σ) και όχι με σ.'},
 ];
 function audGroups(){
@@ -4050,12 +4324,27 @@ function vAud1(){
  <div class="row"><button class="btn c1" onclick="go('e2')">Συνέχεια → Ανάγνωση Α.Π.Ε.</button></div>`;
 }
 
-/* ── βήμα 2: φόρτωση & ανάγνωση ── */
+/* ── βήμα 2: επίσημη βάση + φόρτωση & ανάγνωση ── */
 function vAud2(){
- const A=S.audit;
+ const A=S.audit, c=calc();
+ const nItems=S.groups.reduce((a,g)=>a+g.items.length,0);
+ const hasBud=nItems>0;
+ const hasDisc=S.groups.some(g=>Number(g.discount)>0);
+ const adaDocs=(S.docs||[]).filter(d=>d.ada||d.adam).length;
  return`<h2 class="pt">Ανάγνωση Α.Π.Ε.</h2>
- <p class="pd">Φορτώστε τον Ανακεφαλαιωτικό Πίνακα που σας παραδόθηκε, μαζί με τα φύλλα αναθεώρησης αν υπάρχουν. Η εφαρμογή ξαναϋπολογίζει κάθε γραμμή, κάθε άθροισμα και κάθε νόμιμο όριο ανεξάρτητα, και συγκρίνει με τα δηλωθέντα.</p>
- <div class="card"><h3><span class="pill" style="background:var(--s3)">📥</span>Αρχεία προς έλεγχο</h3><div class="cb">
+ <p class="pd">Ο έλεγχος πατά πάνω στα <b>επίσημα</b> στοιχεία του έργου, που είναι πάντοτε ορθά: τον προϋπολογισμό της δημοπράτησης, την οικονομική προσφορά του Ε.Σ.Η.ΔΗ.Σ. και τα έγγραφα με ΑΔΑ / ΑΔΑΜ. Φορτώστε πρώτα αυτά (κάρτα Α) και μετά τον Πίνακα που σας υποβλήθηκε (κάρτα Β) — κάθε τιμή, ποσότητα και έκπτωση του Πίνακα θα αντιπαραβληθεί μαζί τους.</p>
+ <div class="card"><h3><span class="pill" style="background:var(--s2)">Α</span>Επίσημη βάση ελέγχου — προηγείται πάντα</h3><div class="cb">
+  ${hasBud
+   ?`<div class="note g" style="margin:0 0 12px"><b>✔ Επίσημος προϋπολογισμός φορτωμένος:</b> ${S.groups.length} ομάδες · ${nItems} άρθρα · συμβατικό ποσό <b>${F(c.symCon)} €</b> (με Γ.Ε.&amp;Ο.Ε. ${F(S.project.geoe)}% και απρόβλεπτα ${F(S.project.apr)}%).${hasDisc?'':'<br>⚠ Δεν έχουν οριστεί εκπτώσεις — εισαγάγετε και την οικονομική προσφορά για πλήρη διασταύρωση του συμβατικού ποσού.'}</div>`
+   :`<div class="note w" style="margin:0 0 12px"><b>✖ Δεν έχει φορτωθεί ο επίσημος προϋπολογισμός.</b><br>Τον έχετε πάντα από τη δημοπράτηση του έργου και είναι πάντα σωστός — χωρίς αυτόν ο έλεγχος περιορίζεται στις εσωτερικές διασταυρώσεις του ίδιου του Πίνακα.</div>`}
+  <div class="row">
+   <button class="btn c2" onclick="document.getElementById('budf').click()">📂 Φόρτωση επίσημου προϋπολογισμού</button>
+   <button class="btn c3" onclick="document.getElementById('offf').click()">💼 Εισαγωγή οικονομικής προσφοράς</button>
+   <button class="btn gh" onclick="document.getElementById('batchf').click()">📥 Έγγραφα με ΑΔΑ / ΑΔΑΜ (αποφάσεις, σύμβαση)</button>
+  </div>
+  <p class="hint" style="margin:10px 0 0">Στοιχεία από έγγραφα με ΑΔΑ ή ΑΔΑΜ (αποφάσεις, διακήρυξη, σύμβαση) θεωρούνται ακριβή και δεν ελέγχονται — τροφοδοτούν την ταυτότητα του έργου.${adaDocs?' Έχουν ήδη καταχωριστεί <b>'+adaDocs+'</b> τέτοια έγγραφα.':''}</p>
+ </div></div>
+ <div class="card"><h3><span class="pill" style="background:var(--s3)">Β</span>Ο ελεγχόμενος Πίνακας &amp; τα φύλλα αναθεώρησης</h3><div class="cb">
   ${dropZone('audf','Σύρετε εδώ τον Α.Π.Ε. και τα φύλλα αναθεώρησης','PDF, κείμενο ή φωτογραφία / σαρωμένο — μπορείτε να επιλέξετε πολλά αρχεία μαζί')}
   <p class="hint" style="margin:10px 0 0">Τα φύλλα αναθεώρησης αναγνωρίζονται αυτόματα από το περιεχόμενό τους και ελέγχονται με τους κανόνες του άρθρου 153. Οι φωτογραφίες στέλνονται για ανάγνωση μόνο μετά από δική σας έγκριση, αρχείο-αρχείο.</p>
   ${A.names.length?`<div class="note g" style="margin-top:12px"><b>Αναγνώστηκαν:</b><br>${A.names.map(E).join('<br>')}</div>`:''}
@@ -4195,7 +4484,7 @@ function audEkth(){
   <tr><td>Ο έλεγχος διενεργήθηκε από</td><td>${ph(m.elegktis,'ελεγκτής')}${m.elegktisEid?', '+E(m.elegktisEid):''}</td></tr>
  </table>
  <h2>Β. ΜΕΘΟΔΟΣ ΕΛΕΓΧΟΥ</h2>
- <p>Κάθε μέγεθος του Πίνακα επανυπολογίστηκε ανεξάρτητα από τα πρωτογενή στοιχεία του — ποσότητες, τιμές μονάδας και ποσοστά — και συγκρίθηκε με το αναγραφόμενο. Ο έλεγχος διενεργήθηκε σε πέντε βήματα: (1) αριθμητική επαλήθευση κάθε άρθρου (ποσότητα × τιμή = δαπάνη), (2) αθροίσματα ομάδων και ποσά εκπτώσεων, (3) ανασύνθεση της οικονομικής ανακεφαλαίωσης, (4) ανεξάρτητος υπολογισμός των ορίων της παρ. 3 του άρθρου 156, (5) έλεγχος των συντελεστών αναθεώρησης του άρθρου 153. Όπου αναγράφεται «δηλωθέν» νοείται το ποσό όπως γράφεται στον ελεγχόμενο Πίνακα και όπου «υπολογισμένο» το αποτέλεσμα του ανεξάρτητου υπολογισμού.</p>
+ <p>Κάθε μέγεθος του Πίνακα επανυπολογίστηκε ανεξάρτητα από τα πρωτογενή στοιχεία του — ποσότητες, τιμές μονάδας και ποσοστά — και συγκρίθηκε με το αναγραφόμενο. Ο έλεγχος διενεργήθηκε σε έξι βήματα: (1) διασταύρωση με τον επίσημο προϋπολογισμό της δημοπράτησης και την οικονομική προσφορά του διαγωνισμού — τιμές μονάδας, συμβατικές ποσότητες, εκπτώσεις ομάδων και συμβατικό ποσό, με τα επίσημα στοιχεία (δημοπράτηση, σύμβαση, έγγραφα με ΑΔΑ / ΑΔΑΜ) να λαμβάνονται ως καθ' όλα ορθά, (2) αριθμητική επαλήθευση κάθε άρθρου (ποσότητα × τιμή = δαπάνη), (3) αθροίσματα ομάδων και ποσά εκπτώσεων, (4) ανασύνθεση της οικονομικής ανακεφαλαίωσης, (5) ανεξάρτητος υπολογισμός των ορίων της παρ. 3 του άρθρου 156, όπως ισχύει, (6) έλεγχος των συντελεστών αναθεώρησης του άρθρου 153. Όπου αναγράφεται «δηλωθέν» νοείται το ποσό όπως γράφεται στον ελεγχόμενο Πίνακα και όπου «υπολογισμένο» το αποτέλεσμα του ανεξάρτητου υπολογισμού.</p>
  <h2>Γ. ΕΥΡΗΜΑΤΑ</h2>
  ${groups||'<p><span class="ph">[δεν υπάρχουν ευρήματα]</span></p>'}
  ${s?`<h2>Δ. ΟΡΙΑ ΤΟΥ ΑΡΘΡΟΥ 156 ΑΝΑ ΟΜΑΔΑ (ανεξάρτητος υπολογισμός)</h2>
@@ -4226,8 +4515,8 @@ function audEis(){
  const eisig=v==='return'
   ?`Τη <b>μη έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}» και την <b>επιστροφή του στον συντάκτη του</b> (${ph(m.syntaktis,'συντάκτης')}) για διόρθωση των σφαλμάτων που αναλύονται στη συνημμένη έκθεση ελέγχου και επανυποβολή.`
   :v==='obs'
-  ?`Την <b>έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}»${s&&s.totA!=null?', συνολικής δαπάνης '+F(s.totA)+' € με Φ.Π.Α.':''}, με τις παρατηρήσεις που διατυπώνονται στη συνημμένη έκθεση ελέγχου, σύμφωνα με τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016.`
-  :`Την <b>έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}»${s&&s.totA!=null?', συνολικής δαπάνης '+F(s.totA)+' € με Φ.Π.Α.':''}, σύμφωνα με τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016.`;
+  ?`Την <b>έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}»${s&&s.totA!=null?', συνολικής δαπάνης '+F(s.totA)+' € με Φ.Π.Α.':''}, με τις παρατηρήσεις που διατυπώνονται στη συνημμένη έκθεση ελέγχου, σύμφωνα με τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως ισχύουν.`
+  :`Την <b>έγκριση</b> του ${m.apeNo||1}ου Ανακεφαλαιωτικού Πίνακα Εργασιών του έργου «${E(p.ergo)}»${s&&s.totA!=null?', συνολικής δαπάνης '+F(s.totA)+' € με Φ.Π.Α.':''}, σύμφωνα με τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως ισχύουν.`;
  return`<div class="hdr"><div><b>${E(p.anathetousa)}</b><br>${E(p.nomos)}<br><b>${E(p.dimos)}</b><br>${E(p.dnsi)}<br><br>
   Πληροφορίες: ${ph(m.elegktis,'ελεγκτής')}</div>
   <div>Ρόδος, ${D}<br>Αρ. καταχώρησης: ${ph(p.arKataxwrisis,'…')}<br><br>
@@ -4238,9 +4527,9 @@ function audEis(){
   <li>Τη με αρ. πρωτ. ${ph(p.arPrwtSymvasis,'αρ. πρωτ.')} σύμβαση του έργου, αναδόχου ${ph(p.anadoxos,'ανάδοχος')}.</li>
   <li>Τον ${m.apeNo||1}ο Ανακεφαλαιωτικό Πίνακα Εργασιών, όπως υποβλήθηκε από ${ph(m.syntaktis,'συντάκτη')}${m.arYpovolis?' με το υπ’ αριθ. πρωτ. '+E(m.arYpovolis)+(m.imYpovolis?'/'+E(m.imYpovolis):'')+' έγγραφο':''}.</li>
   <li>Την από ${ph(m.imElegxou,'ημερομηνία')} έκθεση ελέγχου της Υπηρεσίας μας.</li>
-  <li>Τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως ισχύουν.</li>
+  <li>Τις διατάξεις των άρθρων 153 και 156 του Ν. 4412/2016, όπως τροποποιήθηκαν και ισχύουν (ιδίως με τον Ν. 4782/2021).</li>
  </ul>
- <p>Η Υπηρεσία μας διενήργησε πλήρη έλεγχο του υποβληθέντος Πίνακα: επανυπολογίστηκε ανεξάρτητα η αριθμητική κάθε άρθρου, τα αθροίσματα των ομάδων και οι εκπτώσεις, η οικονομική ανακεφαλαίωση, τα όρια της παρ. 3 του άρθρου 156 και οι συντελεστές αναθεώρησης του άρθρου 153.</p>
+ <p>Η Υπηρεσία μας διενήργησε πλήρη έλεγχο του υποβληθέντος Πίνακα: διασταυρώθηκε άρθρο-άρθρο με τον επίσημο προϋπολογισμό της δημοπράτησης και την οικονομική προσφορά του διαγωνισμού, και επανυπολογίστηκαν ανεξάρτητα η αριθμητική κάθε άρθρου, τα αθροίσματα των ομάδων και οι εκπτώσεις, η οικονομική ανακεφαλαίωση, τα όρια της παρ. 3 του άρθρου 156 και οι συντελεστές αναθεώρησης του άρθρου 153.</p>
  <p>${nErr?`Από τον έλεγχο προέκυψαν <b>${nErr} σφάλματα</b>${nWarn?` και ${nWarn} σημεία προσοχής`:''}, όπως αναλύονται στη συνημμένη έκθεση ελέγχου.`
    :`Από τον έλεγχο δεν προέκυψαν αριθμητικά σφάλματα${nWarn?`· επισημαίνονται ${nWarn} σημεία προσοχής, όπως αναλύονται στη συνημμένη έκθεση ελέγχου`:''}.`}
  ${s&&s.symC!=null&&s.symA!=null?` Το συμβατικό ποσό ${near(s.symC,s.symA,0.005)?'παραμένει αμετάβλητο στα '+F(s.symC)+' €':'μεταβάλλεται από '+F(s.symC)+' € σε '+F(s.symA)+' €, ήτοι '+P(s.symPct)}${s.eli>0?', με χρήση «επί έλασσον» δαπανών '+F(s.eli)+' € που απαιτεί σύμφωνη γνώμη του οικείου Τεχνικού Συμβουλίου':''}.`:''}</p>
@@ -4817,12 +5106,17 @@ async function bootAuth(){
 
 </script>
 <script>
-/* ════════════════ ΕΚΚΙΝΗΣΗ ════════════════ */
-if(!libLoad()){ libNew('Νέο έργο'); }
-else { curId=LIB[0].id; S=LIB[0].data; }
+/* ════════════════ ΕΚΚΙΝΗΣΗ ════════════════
+   Κανένα έργο δεν ανοίγει μόνο του: η εφαρμογή ξεκινά ολοκάθαρη με ένα
+   κενό έργο και η οθόνη εκκίνησης ρωτά τον χρήστη τι θέλει να κάνει —
+   συνέχεια του τελευταίου, νέο έργο, ή έλεγχο Α.Π.Ε. τρίτου. */
+libLoad();
+if(!LIB.length){ libNew('Νέο έργο'); }
+else { curId=null; S=blank(); }   /* καθαρή αφετηρία — η επιλογή γίνεται στην οθόνη εκκίνησης */
 window.addEventListener('beforeunload',libSave);
 setInterval(libSave,15000);
 render();
+showWelcome();
 bootAuth();
 /* Κάθε ~2 λεπτά ανεβαίνουν όσα άλλαξαν, εφόσον υπάρχει σύνδεση. */
 setInterval(()=>{ if(SB_ON && !offlineMode && sessValid() && syncState.pending) syncAll().catch(()=>{}); }, 120000);

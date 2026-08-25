@@ -22,6 +22,8 @@ if (await page.evaluate(() => document.getElementById('login').innerHTML.length 
   await page.evaluate(() => workOffline());
   await page.waitForTimeout(200);
 }
+/* Η οθόνη εκκίνησης προσφέρει και απευθείας είσοδο στη λειτουργία ελέγχου. */
+await page.evaluate(() => welcomeChoose('audit'));
 
 let fail = 0, total = 0;
 const t = (name, ok, extra) => {
@@ -57,6 +59,8 @@ const REV_OK = `ΠΙΝΑΚΑΣ ΑΝΑΘΕΩΡΗΣΗΣ ΤΙΜΩΝ
 Δαπανη βασης 1.000,00 αναθεωρημενη 1.100,00 αποτελεσμα 90,00`;
 
 /* ── 1. εναλλαγή λειτουργίας ── */
+t('η επιλογή «Έλεγχος» της οθόνης εκκίνησης οδηγεί στο βήμα 1 του ελέγχου',
+  await page.evaluate(() => !welcomeOpen && isAudit() && tab === 'e1'));
 await page.evaluate(() => setMode('audit'));
 t('εναλλαγή σε λειτουργία ελέγχου', await page.evaluate(() => isAudit() && tab === 'e1'));
 t('η ράγα δείχνει δύο λειτουργίες',
@@ -104,6 +108,10 @@ t('απρόβλεπτα σε χρήση: 0,00 €', Math.abs(r1.aprNeed) < 0.01,
 t('δηλωθέν συμβατικό πέρασε στη σύνοψη', Math.abs(r1.symC - 2442.60) < 0.01, String(r1.symC));
 t('δηλωθέν γενικό σύνολο πέρασε στη σύνοψη', Math.abs(r1.totA - 3028.82) < 0.01, String(r1.totA));
 t('πόρισμα: έγκριση με παρατηρήσεις (γνώμη Τ.Σ.)', r1.verdict === 'obs', r1.verdict);
+t('χωρίς επίσημο προϋπολογισμό: ρητή προειδοποίηση διασταύρωσης',
+  await page.evaluate(() =>
+    S.audit.findings.some(x => x.area === 'Διασταύρωση' && x.sev === 'warn'
+      && x.what.includes('επίσημος προϋπολογισμός'))));
 t('η αναθεώρηση ελέγχθηκε χωρίς σφάλμα',
   await page.evaluate(() =>
     S.audit.findings.some(x => x.area === 'Αναθεώρηση' && x.sev === 'ok') &&
@@ -112,7 +120,7 @@ t('η αναθεώρηση ελέγχθηκε χωρίς σφάλμα',
 /* ── 4. παρουσίαση πορίσματος ── */
 const e3html = await page.evaluate(() => { go('e3'); return document.getElementById('content').innerHTML; });
 t('το πόρισμα δείχνει τα βήματα με εξηγήσεις',
-  e3html.includes('Βήμα 1 — Αριθμητική άρθρων') && e3html.includes('ποσότητα × τιμή μονάδας'));
+  e3html.includes('Βήμα 2 — Αριθμητική άρθρων') && e3html.includes('ποσότητα × τιμή μονάδας'));
 t('το πόρισμα δείχνει τον πίνακα ορίων', e3html.includes('Ανεξάρτητος υπολογισμός ορίων'));
 t('το πόρισμα δείχνει την κρίση του ελεγκτή', e3html.includes('Κρίση του ελεγκτή'));
 t('οι μετρητές δείχνουν το πόρισμα του ελέγχου',
@@ -160,6 +168,62 @@ t('χαλασμένο άθροισμα ομάδας εντοπίζεται', r2.
 t('πόρισμα: επιστροφή για διόρθωση', r2.verdict === 'return', r2.verdict);
 t('μετρητές: επιστροφή για διόρθωση',
   await page.evaluate(() => document.getElementById('meters').innerText.includes('ΕΠΙΣΤΡΟΦΗ ΓΙΑ ΔΙΟΡΘΩΣΗ')));
+
+/* ── 8β. διασταύρωση με τον επίσημο προϋπολογισμό ──
+   Ο προϋπολογισμός της δημοπράτησης και η οικονομική προσφορά είναι πάντα
+   σωστά· ο Πίνακας του τρίτου αντιπαραβάλλεται μαζί τους άρθρο-άρθρο. */
+const OFFICIAL = () => {
+  S.groups = [{ id: 'og', name: 'ΧΩΜΑΤΟΥΡΓΙΚΑ', discount: 10, items: [
+    { id: 'o1', at: '1', perigrafi: 'Εκσκαφη θεμελιων', monada: 'm3', posotita: 100, timi: 10, posotitaApe: 100 },
+    { id: 'o2', at: '2', perigrafi: 'Επιχωση', monada: 'm3', posotita: 50, timi: 20, posotitaApe: 50 }] }];
+  S.project.geoe = 18; S.project.apr = 15; S.project.fpa = 24;
+};
+await page.evaluate(async ([ape, setupSrc]) => {
+  Object.assign(S.audit, { names: [], findings: [], summary: null, data: null });
+  eval('(' + setupSrc + ')()');
+  const f = new File([ape], 'ape.txt', { type: 'text/plain' });
+  await loadAuditFile({ target: { files: [f], value: '' } });
+}, [APE_OK, OFFICIAL.toString()]);
+await page.waitForTimeout(200);
+const rc1 = await page.evaluate(() => ({
+  ok: S.audit.findings.some(x => x.area === 'Διασταύρωση' && x.sev === 'ok' && /Διασταύρωση 2 άρθρων/.test(x.what)),
+  errs: S.audit.findings.filter(x => x.area === 'Διασταύρωση' && x.sev === 'err').length,
+}));
+t('σύμφωνος Πίνακας: 2 άρθρα διασταυρώθηκαν χωρίς σφάλμα', rc1.ok && rc1.errs === 0, JSON.stringify(rc1));
+
+/* Η επίσημη τιμή του Α.Τ. 1 είναι 11 — ο Πίνακας γράφει 10: πρέπει να πιαστεί
+   και η τιμή και το συμβατικό ποσό που παύει να συμφωνεί με τη σύμβαση. */
+await page.evaluate(async ape => {
+  Object.assign(S.audit, { names: [], findings: [], summary: null, data: null });
+  S.groups[0].items[0].timi = 11;
+  const f = new File([ape], 'ape-timi.txt', { type: 'text/plain' });
+  await loadAuditFile({ target: { files: [f], value: '' } });
+}, APE_OK);
+await page.waitForTimeout(200);
+const rc2 = await page.evaluate(() => ({
+  price: S.audit.findings.some(x => x.area === 'Διασταύρωση' && x.sev === 'err' && x.what.includes('τιμή μονάδας')),
+  sym: S.audit.findings.some(x => x.area === 'Διασταύρωση' && x.sev === 'err' && x.what.includes('συμβατικό ποσό')),
+  verdict: audVerdict(),
+}));
+t('αλλοιωμένη τιμή μονάδας εντοπίζεται', rc2.price, JSON.stringify(rc2));
+t('το συμβατικό ποσό ελέγχεται απέναντι στην επίσημη σύμβαση', rc2.sym);
+t('πόρισμα με αλλοιωμένη τιμή: επιστροφή για διόρθωση', rc2.verdict === 'return', rc2.verdict);
+
+/* Άρθρο της σύμβασης που λείπει από τον Πίνακα. */
+await page.evaluate(async ape => {
+  Object.assign(S.audit, { names: [], findings: [], summary: null, data: null });
+  S.groups[0].items[0].timi = 10;
+  S.groups[0].items.push({ id: 'o3', at: '3', perigrafi: 'Σκυροδεμα', monada: 'm3', posotita: 10, timi: 5, posotitaApe: 10 });
+  const f = new File([ape], 'ape-leipei.txt', { type: 'text/plain' });
+  await loadAuditFile({ target: { files: [f], value: '' } });
+}, APE_OK);
+await page.waitForTimeout(200);
+t('άρθρο της σύμβασης που λείπει από τον Πίνακα εντοπίζεται',
+  await page.evaluate(() =>
+    S.audit.findings.some(x => x.area === 'Διασταύρωση' && x.sev === 'err' && x.what.includes('λείπουν'))));
+t('η έκθεση ελέγχου δείχνει τη διασταύρωση',
+  await page.evaluate(() => { go('e4'); curAudDoc = 'ekth'; render();
+    return document.getElementById('docv').innerHTML.includes('διασταύρωση με τον επίσημο προϋπολογισμό'); }));
 
 /* ── 9. υιοθέτηση στη σύνταξη ── */
 await page.evaluate(() => adoptAudit());
