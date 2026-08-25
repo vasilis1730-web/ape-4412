@@ -46,6 +46,35 @@ Excel, και προαιρετικά υιοθέτηση των στοιχείω�
 πλήρη ανασύνταξη των εγγράφων. Η κατάσταση του ελέγχου αποθηκεύεται με το
 έργο και συγχρονίζεται όπως όλα τα υπόλοιπα.
 
+## Άντληση από το ΚΗΜΔΗΣ
+
+Με τον **ΑΔΑΜ** (σύμβασης, διακήρυξης, κατακύρωσης) ή τον **Α/Α ΕΣΗΔΗΣ**, η
+εφαρμογή αντλεί τα επίσημα στοιχεία απευθείας από το **ανοιχτό API του
+ΚΗΜΔΗΣ** — χωρίς κανένα λάθος αντιγραφής: τίτλο, ανάδοχο με Α.Φ.Μ., αριθμό
+και ημερομηνία σύμβασης, ποσά με και χωρίς Φ.Π.Α., χρηματοδότηση, νομικό
+πλαίσιο (κάτω/άνω των ορίων), εντολές πληρωμής και τυχόν νεότερη
+τροποποιητική πράξη. Συμπληρώνονται μόνο τα **κενά** πεδία· διαφορές με ήδη
+συμπληρωμένα αναφέρονται χωρίς να πειραχτούν. Η πράξη καταχωρίζεται στο
+μητρώο εγγράφων με τον ΑΔΑΜ της, οπότε ο έλεγχος Α.Π.Ε. τη μετρά στα
+αξιόπιστα επίσημα στοιχεία. Αν η σύμβαση δείχνει τη διακήρυξή της, δεύτερη
+κλήση φέρνει τον αρχικό προϋπολογισμό και υπολογίζεται η **μέση τεκμαρτή
+έκπτωση**.
+
+Η κλήση περνά από το Edge Function `kimdis-lookup` (το κρατικό API δεν
+στέλνει CORS headers), που μιλά με το
+`cerpp.eprocurement.gov.gr/khmdhs-opendata` — endpoints `/request`,
+`/notice`, `/award`, `/contract` κατά τον τύπο του ΑΔΑΜ (##REQ/PROC/AWRD/
+SYMV#########), και `/{τύπος}/attachment/{ΑΔΑΜ}` για το πρωτότυπο PDF.
+Το σχήμα της απάντησης επαληθεύτηκε με ζωντανή κλήση: τα πεδία της
+σύμβασης είναι `title`, `referenceNumber`, `contractNumber`,
+`contractSignedDate`, `aaht` (Α/Α ΕΣΗΔΗΣ), `organization{key,value}`,
+`legalContext` («κάτω/άνω των ορίων»), `fundingDetails`,
+`contractingDataDetails.contractingMembersDataList[{name,vatNumber}]`,
+`totalCostWithVAT` / `totalCostWithoutVAT`, `objectDetailsList[{vat,cpvs}]`,
+`noticeReferenceNumber`, `nextRefNo`, `paymentRefNo[]`. Τεκμηρίωση:
+<https://cerpp.eprocurement.gov.gr/khmdhs-opendata/help> — Swagger UI:
+<https://cerpp.eprocurement.gov.gr/khmdhs-opendata/swagger-ui/index.html>.
+
 ## Αρχεία
 
 | | |
@@ -53,7 +82,7 @@ Excel, και προαιρετικά υιοθέτηση των στοιχείω�
 | `index.html` | Ολόκληρη η εφαρμογή. Ένα αρχείο, **μηδέν εξαρτήσεις**. |
 | `config.js` | Διεύθυνση και δημόσιο κλειδί της βάσης. |
 | `supabase/migrations/` | Σχήμα βάσης και πολιτικές ασφαλείας. |
-| `supabase/functions/` | Ανάγνωση σαρωμένων εγγράφων (Edge Function). |
+| `supabase/functions/` | Edge Functions: `ocr-pinaka` (ανάγνωση σαρωμένων), `kimdis-lookup` (ΚΗΜΔΗΣ). |
 
 Ο αναγνώστης PDF, ο writer του Excel και ο συγχρονισμός με τη βάση είναι
 γραμμένα από την αρχή μέσα στο `index.html`. Δεν φορτώνεται καμία εξωτερική
@@ -191,6 +220,7 @@ node tools/mock/supabase-mock.mjs      # σε ένα τερματικό
 node tools/sync_test.mjs               # σε άλλο
 node tools/invite_test.mjs             # πρόσκληση και ορισμός κωδικού
 node tools/ocr_test.mjs                # ανάγνωση σαρωμένων και φωτογραφιών
+node tools/kimdis_test.mjs             # άντληση στοιχείων από το ΚΗΜΔΗΣ
 ```
 
 Η λειτουργία ελέγχου Α.Π.Ε. τρίτου ελέγχεται αυτόνομα (δεν χρειάζεται mock):

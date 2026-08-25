@@ -19,6 +19,8 @@ const LOG = [];
 const PWSET = [];
 /* Η απάντηση της υπηρεσίας ανάγνωσης ορίζεται από τη δοκιμή με POST /__ocr. */
 let OCR = null;
+/* Η απάντηση του ΚΗΜΔΗΣ ορίζεται από τη δοκιμή με POST /__kimdis. */
+let KIMDIS = null;
 
 const send = (res, code, obj) => {
   res.writeHead(code, {'Content-Type':'application/json','Access-Control-Allow-Origin':'*',
@@ -72,6 +74,13 @@ http.createServer((req,res)=>{
       OCR.__seen={mime:b.mime, filename:b.filename, mode:b.mode, bytes:(b.data||'').length};
       return send(res, OCR.__status||200, OCR);
     }
+    if(u.pathname==='/functions/v1/kimdis-lookup'){
+      if(!(req.headers.authorization||'').startsWith('Bearer ')) return send(res,401,{message:'JWT required'});
+      if(!KIMDIS) return send(res,404,{error:'Δεν βρέθηκε εγγραφή στο ΚΗΜΔΗΣ.'});
+      const b=JSON.parse(body||'{}');
+      KIMDIS.__seen={q:b.q||null, attachment:b.attachment||null};
+      return send(res, KIMDIS.__status||200, KIMDIS);
+    }
 
     const auth=(req.headers.authorization||'').replace('Bearer ','');
     const me=auth.replace('tok-','');
@@ -97,10 +106,14 @@ http.createServer((req,res)=>{
         return send(res,200,hit.map(r=>({...r, updated_at:new Date().toISOString()})));
       }
     }
-    if(u.pathname==='/__reset'){ rows=[]; seq=0; LOG.length=0; PWSET.length=0; OCR=null; USERS=structuredClone(SEED); return send(res,200,{ok:true}); }
+    if(u.pathname==='/__reset'){ rows=[]; seq=0; LOG.length=0; PWSET.length=0; OCR=null; KIMDIS=null; USERS=structuredClone(SEED); return send(res,200,{ok:true}); }
     if(u.pathname==='/__ocr'){
       if(req.method==='POST'){ OCR=JSON.parse(body||'null'); return send(res,200,{ok:true}); }
       return send(res,200,OCR&&OCR.__seen?OCR.__seen:null);
+    }
+    if(u.pathname==='/__kimdis'){
+      if(req.method==='POST'){ KIMDIS=JSON.parse(body||'null'); return send(res,200,{ok:true}); }
+      return send(res,200,KIMDIS&&KIMDIS.__seen?KIMDIS.__seen:null);
     }
     if(u.pathname==='/__pwset') return send(res,200,PWSET);
     if(u.pathname==='/__log') return send(res,200,LOG);

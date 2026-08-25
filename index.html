@@ -1474,6 +1474,10 @@ function vProject(){
    <span class="hint">Δέχεται PDF, κείμενο και φωτογραφίες ή σκαναρισμένα (JPG, PNG). Μπορείτε να επιλέξετε πολλά αρχεία ταυτόχρονα.</span>
   </div></div></div>
 
+ <div class="card"><h3><span class="pill" style="background:var(--s3)">🏛</span>Άντληση από το ΚΗΜΔΗΣ</h3><div class="cb">
+  ${kimdisBox()}
+ </div></div>
+
  <div class="card"><h3><span class="pill">Α</span>Ταυτότητα έργου</h3><div class="cb">
   <div class="grid g2">${fld('Αναθέτουσα αρχή','project.anathetousa')}${fld('Νομός','project.nomos')}</div>
   <div class="grid g2" style="margin-top:12px">${fld('Δήμος','project.dimos')}${fld('Διεύθυνση / Υπηρεσία','project.dnsi')}</div>
@@ -4343,6 +4347,7 @@ function vAud2(){
    <button class="btn gh" onclick="document.getElementById('batchf').click()">📥 Έγγραφα με ΑΔΑ / ΑΔΑΜ (αποφάσεις, σύμβαση)</button>
   </div>
   <p class="hint" style="margin:10px 0 0">Στοιχεία από έγγραφα με ΑΔΑ ή ΑΔΑΜ (αποφάσεις, διακήρυξη, σύμβαση) θεωρούνται ακριβή και δεν ελέγχονται — τροφοδοτούν την ταυτότητα του έργου.${adaDocs?' Έχουν ήδη καταχωριστεί <b>'+adaDocs+'</b> τέτοια έγγραφα.':''}</p>
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">${kimdisBox()}</div>
  </div></div>
  <div class="card"><h3><span class="pill" style="background:var(--s3)">Β</span>Ο ελεγχόμενος Πίνακας &amp; τα φύλλα αναθεώρησης</h3><div class="cb">
   ${dropZone('audf','Σύρετε εδώ τον Α.Π.Ε. και τα φύλλα αναθεώρησης','PDF, κείμενο ή φωτογραφία / σαρωμένο — μπορείτε να επιλέξετε πολλά αρχεία μαζί')}
@@ -5050,6 +5055,137 @@ async function readAnyText(f){
   }
  }
  return await f.text();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ΑΝΤΛΗΣΗ ΑΠΟ ΤΟ ΚΗΜΔΗΣ (Open Data API)
+
+   Τα στοιχεία του Κεντρικού Ηλεκτρονικού Μητρώου Δημοσίων Συμβάσεων
+   είναι επίσημα και χωρίς λάθη αντιγραφής: με τον ΑΔΑΜ (ή τον Α/Α
+   ΕΣΗΔΗΣ) έρχονται τίτλος, ανάδοχος με Α.Φ.Μ., ποσά, ημερομηνίες,
+   χρηματοδότηση και νομικό πλαίσιο, και συμπληρώνουν τα ΚΕΝΑ πεδία
+   του έργου. Ό,τι είναι ήδη συμπληρωμένο δεν πειράζεται — αναφέρεται
+   μόνο η τυχόν διαφορά. Η κλήση περνά από το Edge Function
+   kimdis-lookup, γιατί το κρατικό API δεν στέλνει CORS headers.
+   ══════════════════════════════════════════════════════════════════ */
+const KIMDIS_TIMEOUT=90000;
+function kimdisBox(){
+ return `<p class="hint" style="margin:0 0 10px">Δώστε τον <b>ΑΔΑΜ</b> — σύμβασης (π.χ. 24SYMV012345678), διακήρυξης (24PROC…) ή κατακύρωσης (24AWRD…) — ή τον <b>Α/Α ΕΣΗΔΗΣ</b>. Τα στοιχεία έρχονται από το επίσημο ανοιχτό API του ΚΗΜΔΗΣ, χωρίς κανένα λάθος αντιγραφής, και συμπληρώνουν τα κενά πεδία του έργου.${SB_ON?'':' <b>Απαιτείται ρύθμιση σύνδεσης με τη βάση.</b>'}</p>
+  <div class="row">
+   <input id="kimq" placeholder="π.χ. 24SYMV012345678 ή Α/Α ΕΣΗΔΗΣ" style="flex:1;min-width:230px;padding:9px 12px;border:1px solid var(--line);border-radius:7px;font:inherit" onkeydown="if(event.key==='Enter')kimdisLookup()">
+   <button class="btn c3" onclick="kimdisLookup()">🔎 Άντληση από ΚΗΜΔΗΣ</button>
+  </div>`;
+}
+async function kimdisCall(q){
+ if(!SB_ON) throw new Error('Δεν έχει ρυθμιστεί η σύνδεση με τη βάση — η κλήση του ΚΗΜΔΗΣ περνά από το Edge Function.');
+ if(!sessValid() && !(sbSession && await sbRefresh()))
+  throw new Error('Χρειάζεται σύνδεση χρήστη για την άντληση από το ΚΗΜΔΗΣ.');
+ const ac=typeof AbortController==='function'?new AbortController():null;
+ const timer=ac?setTimeout(()=>ac.abort(),KIMDIS_TIMEOUT):null;
+ try{
+  return await sbCall('/functions/v1/kimdis-lookup',
+   {method:'POST', signal:ac?ac.signal:undefined, body:JSON.stringify({q})});
+ }catch(e){
+  if(e&&e.name==='AbortError')
+   throw new Error('Το ΚΗΜΔΗΣ άργησε πάνω από '+Math.round(KIMDIS_TIMEOUT/1000)+' δευτερόλεπτα και η αναζήτηση διακόπηκε. Δοκιμάστε ξανά σε λίγο.');
+  throw e;
+ }finally{ if(timer) clearTimeout(timer); }
+}
+/* Η τελευταία σύμβαση που αντλήθηκε, για τον υπολογισμό της τεκμαρτής
+   έκπτωσης όταν στη συνέχεια αντληθεί και η διακήρυξή της. */
+let kimdisPrev=null;
+async function kimdisLookup(qOpt){
+ const el=document.getElementById('kimq');
+ const q=(qOpt!=null?String(qOpt):(el&&el.value||'')).trim();
+ if(!q){ flashMsg={k:'w',t:'Δώστε ΑΔΑΜ ή Α/Α ΕΣΗΔΗΣ.',d:''}; render(); return; }
+ flashMsg={k:'info',t:'Αναζήτηση στο ΚΗΜΔΗΣ…',d:'Το μητρώο απαντά συνήθως σε λίγα δευτερόλεπτα, αλλά σε ώρες αιχμής μπορεί να αργήσει.'}; render();
+ try{
+  const res=await kimdisCall(q);
+  kimdisApply(res);
+ }catch(e){
+  flashMsg={k:'b',t:'Η άντληση από το ΚΗΜΔΗΣ απέτυχε.',
+   d:E(e.message||'')+(e.body&&e.body.detail?'<br><span class="hint">'+E(e.body.detail)+'</span>':'')};
+  render();
+ }
+}
+const isoToGr=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'-'+m[2]+'-'+m[1]:String(s||'');};
+function kimdisApply(res){
+ const raw=res.raw||{};
+ const done=[], kept=[], info=[];
+ /* Συμπληρώνονται μόνο τα κενά πεδία. Διαφορά με ήδη συμπληρωμένο πεδίο
+    αναφέρεται, γιατί το ΚΗΜΔΗΣ είναι το επίσημο και δεν κάνει λάθη. */
+ const put=(path,label,val)=>{
+  if(val==null||val==='')return;
+  const cur=getPath('project.'+path);
+  if(cur===''||cur==null){ setPath('project.'+path,val); done.push('<b>'+label+'</b> ← '+E(String(val))); }
+  else if(String(cur).trim()!==String(val).trim())
+   kept.push('<b>'+label+'</b>: παραμένει «'+E(String(cur))+'» — το ΚΗΜΔΗΣ γράφει «'+E(String(val))+'»');
+ };
+ put('ergo','Τίτλος',raw.title);
+ if(res.kind==='SYMV'){
+  put('adam','ΑΔΑΜ σύμβασης',raw.referenceNumber);
+  put('esidis','Α/Α ΕΣΗΔΗΣ',raw.aaht);
+  put('arPrwtSymvasis','Αριθμός σύμβασης',raw.contractNumber);
+  put('imSymvasis','Ημερομηνία σύμβασης',isoToGr(raw.contractSignedDate));
+  const mem=((raw.contractingDataDetails||{}).contractingMembersDataList||[])[0]||{};
+  put('anadoxos','Ανάδοχος',mem.name);
+  put('afm','Α.Φ.Μ. αναδόχου',mem.vatNumber);
+  const fd=raw.fundingDetails||{};
+  put('xrimatodotisi','Χρηματοδότηση',[fd.publicFundingRef,fd.publicFundingRefNum].filter(Boolean).join(' — '));
+  kimdisPrev={adam:String(raw.referenceNumber||''),without:raw.totalCostWithoutVAT!=null?Number(raw.totalCostWithoutVAT):null};
+  /* Η σύμβαση συχνά δείχνει τη διακήρυξή της: με δεύτερη κλήση έρχεται ο
+     αρχικός προϋπολογισμός και υπολογίζεται η μέση τεκμαρτή έκπτωση. */
+  const link=String(raw.noticeReferenceNumber||raw.prevReferenceNo||'');
+  if(/^\d{2}(PROC|SYMV|AWRD|REQ)\d{9}$/.test(link))
+   info.push('Συνδεδεμένη πράξη: <b>'+E(link)+'</b> — <button class="btn gh" style="padding:4px 10px" onclick="kimdisLookup(\''+link+'\')">Άντληση και αυτής</button>');
+ }else{
+  if(res.kind==='PROC') put('esidis','Α/Α ΕΣΗΔΗΣ',raw.aaht);
+  /* Διακήρυξη μετά από σύμβαση: μέση τεκμαρτή έκπτωση από τα δύο ποσά. */
+  const est=[raw.estTotalCost,raw.estimatedTotalCost,raw.totalCostWithoutVAT,raw.budget]
+    .map(x=>x!=null?Number(x):null).find(x=>x!=null&&isFinite(x)&&x>0);
+  if(res.kind==='PROC'&&est&&kimdisPrev&&kimdisPrev.without){
+   const d=R2((1-kimdisPrev.without/est)*100);
+   info.push('Εκτιμώμενη αξία διακήρυξης <b>'+F(est)+' €</b> · σύμβαση '+E(kimdisPrev.adam)+' '
+    +F(kimdisPrev.without)+' € → μέση τεκμαρτή έκπτωση ≈ <b>'+P(d)+'</b>.');
+  }
+ }
+ const org=(raw.organization||{}).value||'';
+ if(/^ΔΗΜΟΣ\s/.test(org)) put('dimos','Δήμος',org);
+ const od=(raw.objectDetailsList||[])[0]||{};
+ if(od.vat!=null&&String(od.vat)!==String(S.project.fpa))
+  kept.push('<b>Φ.Π.Α.</b>: η εφαρμογή έχει '+E(String(S.project.fpa))+'% — το ΚΗΜΔΗΣ γράφει '+E(String(od.vat))+'%');
+ if(raw.totalCostWithVAT!=null)
+  info.push('Συνολικό ποσό: <b>'+F(raw.totalCostWithVAT)+' €</b> με Φ.Π.Α.'
+   +(raw.totalCostWithoutVAT!=null?' ('+F(raw.totalCostWithoutVAT)+' € χωρίς Φ.Π.Α.)':''));
+ const legal=(raw.legalContext||{}).value||'';
+ if(legal) info.push('Νομικό πλαίσιο: '+E(legal)
+  +(/άνω των ορίων/i.test(legal)?' — <b>⚠ έργο ΑΝΩ των ορίων</b>: η εφαρμογή είναι βαθμονομημένη για έργα κάτω των ορίων (απρόβλεπτα 15%).':''));
+ if(raw.cancelled) info.push('<b>⚠ Η πράξη εμφανίζεται ΑΚΥΡΩΜΕΝΗ στο ΚΗΜΔΗΣ'
+  +(raw.cancellationDate?' ('+E(isoToGr(raw.cancellationDate))+')':'')+'.</b>');
+ if(raw.nextRefNo) info.push('⚠ Υπάρχει νεότερη πράξη: <b>'+E(String(raw.nextRefNo))+'</b>'
+  +(raw.nextModified?' (τροποποίηση)':'')+' — ελέγξτε αν αφορά το έργο σας.');
+ if(Array.isArray(raw.paymentRefNo)&&raw.paymentRefNo.length)
+  info.push(raw.paymentRefNo.length+' εντολές πληρωμής καταχωρισμένες στο ΚΗΜΔΗΣ.');
+ /* Η πράξη καταχωρίζεται στο μητρώο εγγράφων ΜΕ τον ΑΔΑΜ της, οπότε ο
+    έλεγχος Α.Π.Ε. τη μετρά στα αξιόπιστα επίσημα στοιχεία. */
+ const rel=raw.contractRelatedADA||{};
+ const ada=raw.decisionRelatedAda||raw.diavgeiaADA||rel.number1||rel.number2||rel.number3||'';
+ S.docs=S.docs||[];
+ S.docs.push({name:'ΚΗΜΔΗΣ '+(raw.referenceNumber||res.adam||res.aaht||''),
+  field:'ΚΗΜΔΗΣ', kind:{SYMV:'σύμβαση',PROC:'διακήρυξη',AWRD:'κατακύρωση',REQ:'αίτημα'}[res.kind]||'',
+  auth:'ΚΗΜΔΗΣ Open Data', ada:String(ada||''), adam:String(raw.referenceNumber||''),
+  prot:String(raw.contractNumber||''), apof:'',
+  date:isoToGr(raw.contractSignedDate||raw.signedDate||raw.publishedDate||''),
+  thema:String(raw.title||'').slice(0,200), at:nowStr()});
+ if(S.docs.length>200) S.docs.shift();
+ const parts=[];
+ if(done.length) parts.push('<b>Συμπληρώθηκαν:</b><br>· '+done.join('<br>· '));
+ if(kept.length) parts.push('<b>Διαφορές με συμπληρωμένα πεδία (δεν πειράχτηκαν):</b><br>· '+kept.join('<br>· '));
+ if(info.length) parts.push(info.join('<br>'));
+ flashMsg={k:done.length&&!raw.cancelled?'g':'w',
+  t:'Στοιχεία από το ΚΗΜΔΗΣ — '+E(String(raw.referenceNumber||res.aaht||''))+' ('+({SYMV:'σύμβαση',PROC:'διακήρυξη',AWRD:'κατακύρωση',REQ:'αίτημα'}[res.kind]||res.kind)+').',
+  d:parts.join('<br><br>')||'Η εγγραφή βρέθηκε, χωρίς πεδία προς συμπλήρωση.'};
+ libSave(); render();
 }
 
 /* ── γραμμή κατάστασης συγχρονισμού ───────────────────────────────── */
