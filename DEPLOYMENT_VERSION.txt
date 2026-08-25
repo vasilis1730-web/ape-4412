@@ -1,0 +1,3 @@
+APE 4412 live application deployment refresh
+Date: 2026-08-25
+Purpose: trigger GitHub Pages deployment of the current working application from main.
