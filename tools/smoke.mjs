@@ -146,6 +146,38 @@ const kb = await page.evaluate(() => {
 });
 ptc('Enter στη στήλη ποσοτήτων πηγαίνει στο επόμενο άρθρο', kb === true, String(kb));
 
+/* Βάση συντελεστών ΦΕΚ Β΄ 5565/2022: φόρτωση, εύρεση, αυτόματη συμπλήρωση. */
+const fk = await page.evaluate(() => ({
+  n: Object.keys(REV_FEK.c).length,
+  a: (fekCoef('ΟΙΚ-3873') || {}).v, b: (fekCoef('OIK 3873') || {}).v,
+  sub: (fekCoef('ΟΙΚ 4835.2') || {}).v, fb: (fekCoef('ΟΙΚ 3873.1') || {}).v,
+  none: fekCoef('ΟΙΚ 2252'),
+}));
+ptc('η βάση του ΦΕΚ φορτώθηκε (525 κωδικοί)', fk.n === 525, String(fk.n));
+ptc('εύρεση κωδικού με παύλα, λατινικά και υποδιαίρεση',
+  fk.a === 1.220014 && fk.b === 1.220014 && fk.sub === 1.068733 && fk.fb === 1.220014,
+  JSON.stringify(fk));
+ptc('κωδικός εκτός απόφασης δεν εφευρίσκεται', fk.none === null);
+const fa = await page.evaluate(() => {
+  S = blank(); S.project.proypDimopr = 200000;
+  S.anath.ekkY = 2021; S.anath.ekkQ = 0;
+  S.groups = [{ id: 'g1', name: 'Ο1', discount: 0, items: [
+    { id: 'i1', at: '1', perigrafi: 'a', monada: 'm', kodAnath: 'ΟΙΚ 3873', posotita: 10, timi: 10, posotitaApe: 10 },
+    { id: 'i2', at: '2', perigrafi: 'b', monada: 'm', kodAnath: 'ΟΙΚ 4835.2', posotita: 10, timi: 10, posotitaApe: 10 }] }];
+  addPeriod(); addPeriod(); addPeriod();   // ν=1: Γ΄2021, ν=2: Δ΄2021, ν=3: Α΄2022
+  return { p0: S.anath.periods[0].coef, p2: S.anath.periods[2].coef };
+});
+ptc('παγωμένα τρίμηνα 2021: συντελεστής 1,000000 αυτόματα',
+  fa.p0['ΟΙΚ 3873'] === 1 && fa.p0['ΟΙΚ 4835.2'] === 1, JSON.stringify(fa.p0));
+ptc('τρίμηνο Α΄ 2022: οι συντελεστές του ΦΕΚ μπαίνουν μόνοι τους',
+  fa.p2['ΟΙΚ 3873'] === 1.220014 && fa.p2['ΟΙΚ 4835.2'] === 1.068733, JSON.stringify(fa.p2));
+ptc('έργο δημοπρατημένο μετά το ΦΕΚ: πηλίκο ίσων δεικτών = 1,000000',
+  await page.evaluate(() => { S.anath.ekkY = 2023; return revCoefFor('ΟΙΚ 3873', 2024).v === 1; }));
+const fdom = await page.evaluate(() => { S.anath.ekkY = 2021; go('p5');
+  return document.getElementById('content').innerHTML; });
+ptc('η κάρτα δείχνει την ενσωματωμένη βάση και τα σήματα ΦΕΚ',
+  fdom.includes('Ενσωματωμένη βάση συντελεστών') && fdom.includes('ΦΕΚ</span>'));
+
 /* «Έξυπνη» ανάγνωση προϋπολογισμού: αριθμητική γραμμών, ανάκτηση στηλών,
    αθροίσματα ανά ομάδα, συνέχεια των Α.Τ. */
 const BUD = `ΠΡΟΫΠΟΛΟΓΙΣΜΟΣ ΜΕΛΕΤΗΣ
