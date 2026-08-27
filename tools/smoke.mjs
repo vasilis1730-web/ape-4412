@@ -74,6 +74,27 @@ for (const [name, g, exp] of cases) {
   else console.log(`✓ ${name}`);
 }
 
+/* Πολιτική Τεχνικού Συμβουλίου: εσωτερικές αυξομειώσεις ΕΝΤΟΣ ομάδας δεν
+   απαιτούν γνώμη Τ.Σ. (flex, προεπιλογή)· μεταφορές μεταξύ ομάδων και
+   μεταβολή συμβατικού την απαιτούν πάντα· η strict κρίνει κατά το γράμμα. */
+const ptc = (name, ok, extra) => {
+  if (ok) console.log('✓ ' + name);
+  else { console.log('✗ ' + name + (extra ? ' — ' + extra : '')); fail++; }
+};
+const intra = [mk('A',0,[[100,10,120],[100,10,80]])];        // +200 / −200 εντός ομάδας
+const cross = [mk('A',0,[[100,10,120]]), mk('B',0,[[100,10,80]])]; // μεταφορά μεταξύ ομάδων
+const rIn = await page.evaluate(s => { eval(s); const c = calc();
+  return { ts: c.tsNeeded, intra: c.tsIntraOnly, eli: c.eliUsed, d: c.symDelta }; }, setup(intra));
+ptc('εσωτερικές αυξομειώσεις εντός ομάδας: ΔΕΝ απαιτείται Τ.Σ.',
+  rIn.ts === false && rIn.intra === true && Math.abs(rIn.eli - 236) < 0.01 && Math.abs(rIn.d) < 0.01,
+  JSON.stringify(rIn));
+const rSt = await page.evaluate(s => { eval(s); S.project.tsPolicy = 'strict';
+  return calc().tsNeeded; }, setup(intra));
+ptc('αυστηρή γραμμή του νόμου: απαιτείται Τ.Σ. και για εσωτερικές', rSt === true);
+const rCr = await page.evaluate(s => { eval(s); const c = calc();
+  return { ts: c.tsNeeded, tr: c.transfer }; }, setup(cross));
+ptc('μεταφορά μεταξύ ομάδων: απαιτείται Τ.Σ. πάντοτε', rCr.ts === true && rCr.tr > 0, JSON.stringify(rCr));
+
 /* «Έξυπνη» ανάγνωση προϋπολογισμού: αριθμητική γραμμών, ανάκτηση στηλών,
    αθροίσματα ανά ομάδα, συνέχεια των Α.Τ. */
 const BUD = `ΠΡΟΫΠΟΛΟΓΙΣΜΟΣ ΜΕΛΕΤΗΣ

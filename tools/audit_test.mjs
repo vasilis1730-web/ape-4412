@@ -107,7 +107,16 @@ t('«επί έλασσον» εντός ομάδας: 212,40 €', Math.abs(r1.e
 t('απρόβλεπτα σε χρήση: 0,00 €', Math.abs(r1.aprNeed) < 0.01, String(r1.aprNeed));
 t('δηλωθέν συμβατικό πέρασε στη σύνοψη', Math.abs(r1.symC - 2442.60) < 0.01, String(r1.symC));
 t('δηλωθέν γενικό σύνολο πέρασε στη σύνοψη', Math.abs(r1.totA - 3028.82) < 0.01, String(r1.totA));
-t('πόρισμα: έγκριση με παρατηρήσεις (γνώμη Τ.Σ.)', r1.verdict === 'obs', r1.verdict);
+t('πόρισμα: έγκριση με παρατηρήσεις (λείπει η επίσημη βάση)', r1.verdict === 'obs', r1.verdict);
+t('εσωτερικές αυξομειώσεις εντός ομάδας: ΔΕΝ ζητείται Τ.Σ. (πολιτική flex)',
+  await page.evaluate(() =>
+    S.audit.findings.some(x => x.what === 'Σύμφωνη γνώμη Τεχνικού Συμβουλίου'
+      && x.sev === 'ok' && x.note.includes('ΕΝΤΟΣ της ίδιας ομάδας'))));
+t('αυστηρή γραμμή: το ίδιο πόρισμα ζητά Τ.Σ. για κάθε «επί έλασσον»',
+  await page.evaluate(() => { setTsPolicy('strict');
+    const w = S.audit.findings.some(x => x.what === 'Σύμφωνη γνώμη Τεχνικού Συμβουλίου'
+      && x.sev === 'warn' && x.calc === 'ΑΠΑΙΤΕΙΤΑΙ');
+    setTsPolicy('flex'); return w; }));
 t('χωρίς επίσημο προϋπολογισμό: ρητή προειδοποίηση διασταύρωσης',
   await page.evaluate(() =>
     S.audit.findings.some(x => x.area === 'Διασταύρωση' && x.sev === 'warn'
@@ -190,6 +199,13 @@ const rc1 = await page.evaluate(() => ({
   errs: S.audit.findings.filter(x => x.area === 'Διασταύρωση' && x.sev === 'err').length,
 }));
 t('σύμφωνος Πίνακας: 2 άρθρα διασταυρώθηκαν χωρίς σφάλμα', rc1.ok && rc1.errs === 0, JSON.stringify(rc1));
+/* Με επίσημη βάση, εσωτερικές αυξομειώσεις και τίποτα άλλο: κανένα καμπανάκι —
+   ο καθαρός Πίνακας παίρνει πλέον καθαρή πρόταση έγκρισης, χωρίς Τ.Σ. */
+t('καθαρός Πίνακας με επίσημη βάση: ΠΡΟΤΕΙΝΕΤΑΙ ΕΓΚΡΙΣΗ χωρίς Τ.Σ.',
+  await page.evaluate(() => audVerdict() === 'approve'
+    && !S.audit.findings.some(x => x.sev === 'warn' || x.sev === 'err')),
+  await page.evaluate(() => JSON.stringify(S.audit.findings.filter(x => x.sev !== 'ok')
+    .map(x => x.what))));
 
 /* Η επίσημη τιμή του Α.Τ. 1 είναι 11 — ο Πίνακας γράφει 10: πρέπει να πιαστεί
    και η τιμή και το συμβατικό ποσό που παύει να συμφωνεί με τη σύμβαση. */
