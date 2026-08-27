@@ -67,3 +67,85 @@
 Η εισαγωγή απαιτεί λογαριασμό **administrator** (μόνο αυτός ενημερώνει
 περιγραφές, τιμές και προδιαγραφές του κεντρικού καταλόγου) και ισχύον
 `EXPORT_TOKEN` — το ενσωματωμένο λήγει στις **03/09/2026**.
+
+---
+
+## Κατάσταση εισαγωγής στην εφαρμογή
+
+Τα δεδομένα έχουν **εισαχθεί απευθείας** στη βάση της εφαρμογής
+(Supabase project `omncqldgtkdcjpqfwwlr` — `promitheies-rodou-staging`).
+Δεν απαιτείται πλέον εισαγωγή του Excel για τον κατάλογο.
+
+### Α. Υπηρεσίες — ομάδα 29 «SRV06 · Συντήρηση & αναγόμωση πυροσβεστήρων»
+
+Τα 22 παλαιά είδη **αντικαταστάθηκαν επί τόπου** (UPDATE, ίδια `id` και
+`sort_order`) από τα 22 είδη της μελέτης. Ενημερώθηκαν: περιγραφή,
+υποκατηγορία, CPV `24951230-6`, τεχνικές προδιαγραφές, πρότυπα,
+υποχρεωτική περιοδικότητα (`notes_for_tender`) και τιμή μονάδας.
+
+Επειδή διατηρήθηκαν τα `id`, το παραδοτέο `.xlsx` **παραμένει έγκυρο** και
+συμβατό με το φύλλο `ΚΛΕΙΔΙΑ_ΕΙΔΩΝ`.
+
+### Β. Προμήθειες — νέα ομάδα «ΠΥΡΟΣΒΕΣΤΗΡΕΣ»
+
+| Πεδίο | Τιμή |
+|---|---|
+| `id` | 32 |
+| `code` | `fire_extinguishers` |
+| `name` / `short_name` | ΠΥΡΟΣΒΕΣΤΗΡΕΣ / Πυροσβεστήρες |
+| `domain` | `procurement` |
+| `sort_order` | 15 |
+| Είδη | 17 (`FIR-2026-001` … `FIR-2026-017`) |
+| CPV | `35111300-8` (πυροσβεστήρες — προμήθεια) |
+| `ce_required` | ΝΑΙ σε όλα |
+
+Περιλαμβάνει τους ίδιους τύπους πυροσβεστήρων με τη μελέτη, ως **νέος
+εξοπλισμός προς προμήθεια**: ξηράς κόνεως 2/3/6/12 kg, τροχήλατοι 25/50 kg,
+CO₂ 2/5 kg, τροχήλατοι CO₂ 30/50 kg, οροφής 6/12 kg, δοχείο τοπικής
+εφαρμογής 12 kg, κατηγορίας F 2/9 lt, αφρού AFFF 9/50 lt.
+
+> Οι τιμές μονάδας της ομάδας προμηθειών είναι **ενδεικτικές εκτιμήσεις
+> αγοράς**, όχι συμβατικές. Τέσσερις από αυτές (ξηράς κόνεως 6 kg και 12 kg,
+> CO₂ 5 kg, οροφής 6 kg) κρατήθηκαν από τις προϋπάρχουσες τιμές του καταλόγου.
+
+### Επαλήθευση
+
+Και τα 39 είδη επαληθεύτηκαν με σύγκριση **MD5 ανά πεδίο** (όνομα, τεχνικές
+προδιαγραφές, πρότυπα, περιοδικότητα, τιμή) έναντι των `items.py` /
+`supplies.py` — ταυτίζονται byte-for-byte. Το `app_audit_log` κατέγραψε
+ακριβώς 39 μεταβολές (22 updates + 17 inserts).
+
+### Επαναφορά
+
+Η προηγούμενη κατάσταση της ομάδας 29 διατηρείται στο `app_audit_log`
+(`before_data`), οπότε η αναίρεση γίνεται από την ίδια τη βάση:
+
+```sql
+-- Α. Επαναφορά των 22 ειδών υπηρεσιών στην προ της αλλαγής μορφή
+UPDATE materials m SET
+  name              = b.before_data->>'name',
+  short_name        = b.before_data->>'short_name',
+  subcategory       = b.before_data->>'subcategory',
+  cpv               = b.before_data->>'cpv',
+  technical_specs   = b.before_data->>'technical_specs',
+  standards         = b.before_data->>'standards',
+  notes_for_tender  = b.before_data->>'notes_for_tender',
+  default_unit_price= (b.before_data->>'default_unit_price')::numeric
+FROM (
+  SELECT DISTINCT ON (entity_id) entity_id, before_data
+  FROM app_audit_log
+  WHERE entity_type='materials' AND event_type='update'
+  ORDER BY entity_id, occurred_at DESC
+) b
+WHERE m.id::text = b.entity_id AND m.group_id = 29;
+
+-- Β. Αναίρεση της ομάδας προμηθειών
+DELETE FROM materials WHERE group_id=(SELECT id FROM procurement_groups WHERE code='fire_extinguishers');
+DELETE FROM procurement_groups WHERE code='fire_extinguishers';
+```
+
+### Τι ΔΕΝ έγινε
+
+Οι **ποσότητες** της μελέτης (2, 6, 33, 300, …) δεν καταχωρήθηκαν: ζουν στα
+`unit_requests` / `request_lines` ανά Δημοτική Ενότητα και έτος, και οι
+πίνακες είναι ακόμη κενοί σε ολόκληρη την εφαρμογή.
