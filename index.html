@@ -1855,28 +1855,79 @@ function apeSummary(c){
 function vAnath(){
  const A=S.anath,codes=allRevCodes();
  const stab=stabilityQuarters();
+ const nItems=S.groups.reduce((a,g)=>a+g.items.length,0);
+ const yNow=new Date().getFullYear();
+ const curY=parseInt(A.ekkY);
+ const ekkSet=!!curY;
+ /* πλήθος άρθρων ανά κωδικό αναθεώρησης — φαίνεται δίπλα σε κάθε συντελεστή */
+ const codeCount={}; let noCode=0;
+ S.groups.forEach(g=>g.items.forEach(it=>{ if(it.kodAnath)codeCount[it.kodAnath]=(codeCount[it.kodAnath]||0)+1; else noCode++; }));
+ /* αναδυόμενο μενού ετών */
+ const years=[]; for(let y=yNow+1;y>=2016;y--)years.push(y);
+ if(curY&&!years.includes(curY))years.push(curY);
+ /* γραμμή χρόνου: εκκίνηση → σταθερά τρίμηνα → ν=1, ν=2, … → επόμενο */
+ let timeline='';
+ if(ekkSet){
+  const y=curY,q=Number(A.ekkQ)||0,chips=[];
+  chips.push('<span class="tag" style="background:#E4E9F1">'+quarterLabel(y,q)+' · εκκίνηση</span>');
+  for(let k=1;k<stab;k++){const[Y,Q]=addQuarters(y,q,k);
+   chips.push('<span class="tag" style="background:#E4E9F1">'+quarterLabel(Y,Q)+' · σταθερές τιμές</span>');}
+  A.periods.forEach((p,i)=>{const[Y,Q]=addQuarters(y,q,stab+i);
+   chips.push('<span class="st ok" style="padding:3px 9px"><b></b>'+quarterLabel(Y,Q)+' · ν='+(i+1)+'</span>');});
+  const nx=nextPeriodQuarter();
+  if(nx&&A.periods.length<40)
+   chips.push('<span class="tag" style="border:1px dashed var(--ink3);background:transparent;opacity:.8">'+quarterLabel(nx[0],nx[1])+' · επόμενο (ν='+(A.periods.length+1)+')</span>');
+  timeline='<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:12px">'+chips.join('')+'</div>';
+ }
+ /* έλεγχος ετοιμότητας: ακατανέμητα άρθρα και κωδικοί χωρίς συντελεστή */
+ let unalloc=0;
+ S.groups.forEach(g=>g.items.forEach(it=>{let a=0;A.periods.forEach(pp=>{a+=Number((pp.q||{})[it.id])||0;});
+  if(Math.abs(a-(Number(it.posotitaApe)||0))>0.001)unalloc++;}));
+ const missPer=[];
+ A.periods.forEach((p,i)=>{
+  const used=new Set();
+  S.groups.forEach(g=>g.items.forEach(it=>{ if((Number((p.q||{})[it.id])||0)>0)used.add(it.kodAnath||'—');}));
+  const miss=[...used].filter(k=>k!=='—'&&!(Number((p.coef||{})[k])>0));
+  if(miss.length)missPer.push({label:p.label||autoLabel(i)||('Περίοδος '+(i+1)),miss});
+ });
+
+ const nx=nextPeriodQuarter();
  let list=A.periods.map((p,i)=>{
   const r=periodCalc(p,i);
-  return`<div class="card"><h3><span class="pill">ν=${r.nu}</span>${E(p.label||autoLabel(i)||('Περίοδος '+(i+1)))}
-   <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+  /* κατάσταση της περιόδου: πόσα άρθρα έχουν ποσότητα, λείπουν συντελεστές; */
+  const used=new Set(); let nQ=0;
+  S.groups.forEach(g=>g.items.forEach(it=>{ if((Number((p.q||{})[it.id])||0)>0){nQ++;used.add(it.kodAnath||'—');}}));
+  const miss=[...used].filter(k=>k!=='—'&&!(Number((p.coef||{})[k])>0));
+  return`<div class="card"><h3><span class="pill" style="background:var(--s6)">ν=${r.nu}</span>${E(p.label||autoLabel(i)||('Περίοδος '+(i+1)))}
+   <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    ${nQ?`<span class="st ${miss.length?'warn':'ok'}"><b></b>${nQ} άρθρα${miss.length?' · λείπουν '+miss.length+' συντελεστές':''}</span>`:'<span class="st na"><b></b>χωρίς ποσότητες ακόμη</span>'}
     <span class="tag">σ = ${r.sigma.toFixed(2).replace('.',',')}</span>
     <span class="tag">1 − σ = ${(1-r.sigma).toFixed(2).replace('.',',')}</span>
     <button class="btn dgr" onclick="delPeriod(${i})">Διαγραφή</button></span></h3><div class="cb">
-   <div class="grid g4">
-    <label class="f"><span>Ονομασία περιόδου</span><input type="text" value="${E(p.label||autoLabel(i))}" oninput="setPeriod(${i},'label',this.value)"></label>
-    <label class="f"><span>ν (χειροκίνητα)</span><input class="num" type="number" value="${p.nuManual?(p.nu||''):r.nu}" oninput="setPeriod(${i},'nu',this.value,1);setPeriod(${i},'nuManual',true)"></label>
-    <label class="f"><span>σ (χειροκίνητα)</span><input class="num" type="text" value="${p.sigmaManual?(p.sigma||''):r.sigma}" oninput="setPeriod(${i},'sigma',this.value,1);setPeriod(${i},'sigmaManual',true)"></label>
-    <div style="align-self:end"><button class="btn gh sm" onclick="resetPeriod(${i})">Επαναφορά αυτόματων</button></div>
-   </div>
-   <h4 style="font-size:12px;margin:16px 0 7px;color:var(--ink2)">Συντελεστές Αν/Αο ανά κωδικό αναθεώρησης</h4>
-   <div class="grid g4">${codes.map(k=>`<label class="f"><span>${E(k)}</span>
-     <input class="num" type="text" value="${E((p.coef&&p.coef[k])??'')}" placeholder="1,000000"
-      data-period="${i}" data-coef="${E(k)}" oninput="setCoef(this.dataset.period,this.dataset.coef,this.value)"></label>`).join('')||'<span class="hint">Δεν έχουν οριστεί κωδικοί αναθεώρησης στα άρθρα.</span>'}</div>
-   <h4 style="font-size:12px;margin:16px 0 7px;color:var(--ink2)">Ποσότητες που εκτελέστηκαν στην περίοδο</h4>
+
+   <p class="hint" style="margin:0 0 12px"><b>Τι κάνετε εδώ, με τη σειρά:</b> ① συμπληρώνετε τους συντελεστές Αν/Αο της περιόδου (ένας ανά κωδικό αναθεώρησης, από τα εγκεκριμένα των πρακτικών της Ε.Δ.Τ.Δ.Ε. για το συγκεκριμένο τρίμηνο) → ② καταχωρίζετε τις ποσότητες που εκτελέστηκαν μέσα στο τρίμηνο → ③ ελέγχετε το «Σύνολο περιόδου» στο τέλος της κάρτας. Το ν και το σ έχουν ήδη υπολογιστεί αυτόματα από τον νόμο.</p>
+
+   <h4 style="font-size:12px;margin:0 0 7px;color:var(--ink2)">① Συντελεστές Αν/Αο ανά κωδικό αναθεώρησης
+    ${i>0?`<button class="btn gh sm" style="margin-left:10px" onclick="copyCoefs(${i})" title="Φέρνει όλους τους συντελεστές της προηγούμενης περιόδου — τους διορθώνετε μετά όπου διαφέρουν.">⧉ Αντιγραφή από «${E(A.periods[i-1].label||autoLabel(i-1)||('Περίοδος '+i))}»</button>`:''}</h4>
+   <div class="grid g4">${codes.map(k=>{
+     const v=(p.coef&&p.coef[k])??'';
+     const bad=used.has(k)&&!(Number(v)>0);
+     return`<label class="f"><span>${E(k)} <i style="font-weight:400;color:var(--ink3)">(${codeCount[k]||0} άρθρα)</i></span>
+     <input class="num" type="text" value="${E(v)}" placeholder="π.χ. 1,043215"
+      style="${bad?'border-color:var(--warn);background:#FFF9EC':''}"
+      data-period="${i}" data-coef="${E(k)}" oninput="setCoef(this.dataset.period,this.dataset.coef,this.value)">
+     ${bad?'<span class="hint" style="color:var(--warn)">Χρησιμοποιείται στην περίοδο — ορίστε τον.</span>':''}</label>`;}).join('')
+    ||'<span class="hint">Δεν έχουν οριστεί κωδικοί αναθεώρησης στα άρθρα του βήματος 2 — χωρίς αυτούς δεν υπολογίζεται αναθεώρηση.</span>'}</div>
+   <p class="hint" style="margin:7px 0 0">Ο συντελεστής είναι το πηλίκο <b>Αν/Αο</b> του κωδικού για το τρίμηνο της περιόδου. Κενό πεδίο = 1,000000 (μηδενική αναθεώρηση για τον κωδικό).${noCode?' <b>'+noCode+' άρθρα χωρίς κωδικό αναθεώρησης θα συμμετάσχουν με συντελεστή 1.</b>':''}</p>
+
+   <h4 style="font-size:12px;margin:16px 0 7px;color:var(--ink2)">② Ποσότητες που εκτελέστηκαν στην περίοδο
+    <button class="btn gh sm" style="margin-left:10px" onclick="allocRest(${i})" title="Βάζει σε κάθε άρθρο ό,τι δεν έχει κατανεμηθεί σε άλλες περιόδους. Ιδανικό για την τελευταία περίοδο ή για έργο ενός τριμήνου.">⤓ Κατανομή όλου του υπολοίπου εδώ</button>
+    <button class="btn gh sm" onclick="zeroPeriod(${i})">Μηδενισμός περιόδου</button></h4>
    <!-- Ο πίνακας άρθρων αποδίδεται μόνο για την ανοιχτή περίοδο: σε έργο 800
         άρθρων με 12 τρίμηνα η ταυτόχρονη απόδοση όλων πάγωνε τη σελίδα. -->
    <details ${A.periods.length<=2?'open':''}><summary style="cursor:pointer;font-size:12px;color:var(--s1);margin-bottom:8px">
-     Άνοιγμα πίνακα ποσοτήτων (${S.groups.reduce((a,g)=>a+g.items.length,0)} άρθρα)</summary>
+     Άνοιγμα πίνακα ποσοτήτων (${nItems} άρθρα)</summary>
+   <p class="hint" style="margin:0 0 8px">⌨ <b>Enter</b> ή <b>↓</b> = επόμενο άρθρο · <b>↑</b> = προηγούμενο. Η στήλη «Κατανεμημένα» πρασινίζει όταν το άθροισμα όλων των περιόδων ισούται με την ποσότητα του Α.Π.Ε.</p>
    <div class="scroll" style="max-height:280px"><table class="t"><thead><tr>
      <th style="width:70px">Α.Τ.</th><th>Είδος εργασιών</th><th style="width:80px">Κωδ. αναθ.</th>
      <th class="n" style="width:90px">Σύνολο Α.Π.Ε.</th><th class="n" style="width:100px">Περιόδου</th>
@@ -1887,17 +1938,28 @@ function vAnath(){
        const ok=Math.abs(alloc-tot)<0.001;
        return`<tr><td>${E(it.at||'')}</td><td style="max-width:280px">${E(it.perigrafi||'')}</td>
         <td>${E(it.kodAnath||'—')}</td><td class="n">${FQ(tot)}</td>
-        <td class="n"><input class="q" value="${(p.q&&p.q[it.id])??''}" oninput="setQty(${i},'${it.id}',this.value)"></td>
+        <td class="n"><input class="q" value="${(p.q&&p.q[it.id])??''}" onkeydown="qtyKey(event)" oninput="setQty(${i},'${it.id}',this.value)"></td>
         <td class="n"><span class="st ${ok?'ok':'warn'}" id="al-${i}-${it.id}"><b></b>${FQ(alloc)}</span></td></tr>`;
      }).join('')).join('')}
    </tbody></table></div></details>
-   <h4 style="font-size:12px;margin:16px 0 7px;color:var(--ink2)">Υλικά επί τόπου του έργου <span class="hint" style="font-weight:400">— θετική αξία για πίστωση, αρνητική για αντιλογισμό κατά την ενσωμάτωση (άρθρο 153 §10)</span></h4>
-   ${(p.materials||[]).map((m,mi)=>`<div class="row" style="margin-bottom:6px">
-     <input type="text" placeholder="Περιγραφή υλικού" value="${E(m.name||'')}" oninput="setMat(${i},${mi},'name',this.value)" style="flex:2">
-     <input class="num" placeholder="Αξία (€)" value="${m.value??''}" oninput="setMat(${i},${mi},'value',this.value,1)" style="flex:1">
-     <input class="num" placeholder="Αν/Αο" value="${m.coef??''}" oninput="setMat(${i},${mi},'coef',this.value,1)" style="flex:1">
-     <button class="btn dgr" onclick="delMat(${i},${mi})">✕</button></div>`).join('')}
-   <button class="btn gh sm" onclick="addMat(${i})">＋ Γραμμή υλικών</button>
+
+   <details style="margin-top:14px"><summary style="cursor:pointer;font-size:12px;color:var(--ink3)">Προαιρετικά — υλικά επί τόπου &amp; χειροκίνητη υπέρβαση ν, σ</summary>
+    <h4 style="font-size:12px;margin:12px 0 7px;color:var(--ink2)">Υλικά επί τόπου του έργου <span class="hint" style="font-weight:400">— θετική αξία για πίστωση, αρνητική για αντιλογισμό κατά την ενσωμάτωση (άρθρο 153 §10)</span></h4>
+    ${(p.materials||[]).map((m,mi)=>`<div class="row" style="margin-bottom:6px">
+      <input type="text" placeholder="Περιγραφή υλικού" value="${E(m.name||'')}" oninput="setMat(${i},${mi},'name',this.value)" style="flex:2">
+      <input class="num" placeholder="Αξία (€)" value="${m.value??''}" oninput="setMat(${i},${mi},'value',this.value,1)" style="flex:1">
+      <input class="num" placeholder="Αν/Αο" value="${m.coef??''}" oninput="setMat(${i},${mi},'coef',this.value,1)" style="flex:1">
+      <button class="btn dgr" onclick="delMat(${i},${mi})">✕</button></div>`).join('')}
+    <button class="btn gh sm" onclick="addMat(${i})">＋ Γραμμή υλικών</button>
+    <div class="grid g4" style="margin-top:12px">
+     <label class="f"><span>Ονομασία περιόδου</span><input type="text" value="${E(p.label||autoLabel(i))}" oninput="setPeriod(${i},'label',this.value)"></label>
+     <label class="f"><span>ν (χειροκίνητα)</span><input class="num" type="number" value="${p.nuManual?(p.nu||''):r.nu}" oninput="setPeriod(${i},'nu',this.value,1);setPeriod(${i},'nuManual',true)"></label>
+     <label class="f"><span>σ (χειροκίνητα)</span><input class="num" type="text" value="${p.sigmaManual?(p.sigma||''):r.sigma}" oninput="setPeriod(${i},'sigma',this.value,1);setPeriod(${i},'sigmaManual',true)"></label>
+     <div style="align-self:end"><button class="btn gh sm" onclick="resetPeriod(${i})">Επαναφορά αυτόματων</button></div>
+    </div>
+    ${p.nuManual||p.sigmaManual?'<p class="hint" style="color:var(--warn);margin-top:6px">⚠ Ισχύει χειροκίνητη υπέρβαση των αυτόματων ν / σ — βεβαιωθείτε ότι είναι ηθελημένη.</p>':''}
+   </details>
+
    <div style="margin-top:14px;border-top:1px solid var(--line2);padding-top:12px" id="pr-${i}">
     <div class="kv"><span class="k">Δαπάνη που αναθεωρείται (εργασίες, με Γ.Ε. &amp; Ο.Ε.)</span><span class="v">${F(r.base)}</span></div>
     <div class="kv"><span class="k">Αναθεωρημένη δαπάνη</span><span class="v">${F(r.rev)}</span></div>
@@ -1908,30 +1970,65 @@ function vAnath(){
   </div></div>`;
  }).join('');
 
+ /* το σ₁ ως αναδυόμενο μενού — με τις δύο θεσμοθετημένες τιμές */
+ const s1=Number(A.sigma1)||0.07;
+ const s1opts=[[0.07,'0,07 — έργα με προσφορές μετά την 22-12-2021 (ΦΕΚ Β΄ 5983/2021)'],
+               [0.12,'0,12 — παλαιότερα έργα (αρχικό κείμενο άρθρου 153)']];
+ const s1custom=!s1opts.some(o=>Math.abs(o[0]-s1)<1e-9);
+
  return`<h2 class="pt">Αναθεώρηση τιμών</h2>
- <p class="pd">Ορίστε τον χρόνο εκκίνησης και προσθέστε μία περίοδο για κάθε τρίμηνο στο οποίο εκτελέστηκαν εργασίες. Το ν και το σ υπολογίζονται αυτόματα από τον νόμο· μπορείτε να τα υπερβείτε χειροκίνητα.</p>
- <div class="card"><h3><span class="pill">⚙</span>Παράμετροι αναθεώρησης</h3><div class="cb">
+ <p class="pd">Τρία βήματα, με τη σειρά: <b>Α</b> ορίζετε το τρίμηνο εκκίνησης και το σ₁ — <b>Β</b> προσθέτετε μία περίοδο για κάθε τρίμηνο στο οποίο εκτελέστηκαν εργασίες — <b>Γ</b> μέσα σε κάθε περίοδο συμπληρώνετε συντελεστές και ποσότητες. Το ν, το σ και όλα τα ποσά υπολογίζονται αυτόματα κατά το άρθρο 153 και περνούν μόνα τους στον Α.Π.Ε. και στα έγγραφα.</p>
+
+ ${!nItems?'<div class="note w"><b>Δεν υπάρχουν ακόμη άρθρα.</b> Η αναθεώρηση υπολογίζεται πάνω στα άρθρα του έργου — φορτώστε πρώτα τον προϋπολογισμό (βήμα 2) και τις ποσότητες του Α.Π.Ε. (βήμα 4).</div>':''}
+
+ <div class="card"><h3><span class="pill" style="background:var(--s6)">Α</span>Χρόνος εκκίνησης &amp; σταθερός συντελεστής σ₁</h3><div class="cb">
+  <p class="hint" style="margin:0 0 12px">Χρόνος εκκίνησης της αναθεώρησης είναι το <b>τρίμηνο της δημοπράτησης</b> (υποβολής προσφορών). Οι τιμές μένουν σταθερές ${stab===2?'σε αυτό και στο επόμενο τρίμηνο':'μόνο σε αυτό το τρίμηνο'}· η αναθεώρηση αρχίζει από το αμέσως επόμενο (ν = 1).</p>
   <div class="grid g4">
-   <label class="f"><span>Έτος εκκίνησης</span><input class="num" type="number" value="${E(S.anath.ekkY)}" oninput="setv('anath.ekkY',this.value,1)"></label>
-   <label class="f"><span>Τρίμηνο εκκίνησης</span><select onchange="setv('anath.ekkQ',this.value,1)">
-     ${QUARTERS.map((q,i)=>`<option value="${i}" ${Number(S.anath.ekkQ)===i?'selected':''}>${q}</option>`).join('')}</select></label>
-   <label class="f"><span>σ₁</span><input class="num" type="text" value="${S.anath.sigma1}" oninput="setv('anath.sigma1',this.value,1)">
-     <span class="hint">0,07 για έργα που δημοπρατήθηκαν μετά τη ΦΕΚ Β΄ 5983/2021 · 0,12 κατά τον νόμο</span></label>
-   <div style="align-self:end"><button class="btn c6" onclick="addPeriod()">＋ Προσθήκη περιόδου</button></div>
+   <label class="f"><span>Έτος δημοπράτησης</span><select onchange="setv('anath.ekkY',this.value,1)">
+     <option value="">— επιλέξτε —</option>
+     ${years.map(y=>`<option value="${y}"${curY===y?' selected':''}>${y}</option>`).join('')}</select></label>
+   <label class="f"><span>Τρίμηνο δημοπράτησης</span><select onchange="setv('anath.ekkQ',this.value,1)">
+     ${QUARTERS.map((q,i)=>`<option value="${i}" ${Number(A.ekkQ)===i?'selected':''}>${q} (${['Ιαν–Μαρ','Απρ–Ιουν','Ιουλ–Σεπ','Οκτ–Δεκ'][i]})</option>`).join('')}</select></label>
+   <label class="f"><span>σ₁ (σταθερός συντελεστής βάσης)</span><select onchange="if(this.value!=='c'){setv('anath.sigma1',this.value,1);render()}else{this.nextElementSibling.style.display='block'}">
+     ${s1opts.map(o=>`<option value="${o[0]}"${Math.abs(s1-o[0])<1e-9?' selected':''}>${o[1]}</option>`).join('')}
+     <option value="c"${s1custom?' selected':''}>Άλλη τιμή…</option></select>
+    <input class="num" type="text" value="${s1custom?A.sigma1:''}" placeholder="π.χ. 0,07"
+      style="display:${s1custom?'block':'none'};margin-top:6px" oninput="setv('anath.sigma1',this.value,1)"></label>
+   <div style="align-self:end"><button class="btn gh" onclick="anathSetFromTender()"
+     title="Διαβάζει την «Ημερομηνία διαγωνισμού» του βήματος 1 και ορίζει αυτόματα έτος και τρίμηνο.">📅 Από την ημερομηνία διαγωνισμού${S.project.imDiagonismou?' ('+E(S.project.imDiagonismou)+')':''}</button></div>
   </div>
   <div class="note" style="margin-top:14px" id="stabNote">Ο προϋπολογισμός δημοπράτησης είναι <b>${F(S.project.proypDimopr)} €</b> χωρίς Φ.Π.Α., άρα οι τιμές παραμένουν σταθερές
    <b>${stab===2?'στο τρίμηνο εκκίνησης και στο αμέσως επόμενο':'μόνο στο τρίμηνο εκκίνησης'}</b> (άρθρο 153 §5).
    Η πρώτη αναθεωρητική περίοδος (ν = 1) είναι επομένως το <b>${autoLabel(0)||'—'}</b>.</div>
+  ${timeline}
  </div></div>
- ${list||'<div class="card"><div class="empty"><b>Καμία περίοδος</b>Προσθέστε μία περίοδο για κάθε τρίμηνο εκτέλεσης εργασιών.</div></div>'}
- <div class="card"><h3><span class="pill">Σ</span>Συγκεντρωτικός πίνακας δαπάνης αναθεώρησης</h3>
+
+ <div class="card"><h3><span class="pill" style="background:var(--s6)">Β</span>Περίοδοι αναθεώρησης — ένα τρίμηνο η καθεμία</h3><div class="cb">
+  <p class="hint" style="margin:0 0 12px">Κάθε περίοδος αντιστοιχεί σε <b>ένα ημερολογιακό τρίμηνο</b> εκτέλεσης εργασιών, με τη σειρά. Το κουμπί προσθέτει πάντοτε το σωστό επόμενο τρίμηνο — δεν χρειάζεται να το υπολογίσετε.</p>
+  <div class="row">
+   <button class="btn c6" onclick="addPeriod()" ${ekkSet?'':'disabled title="Ορίστε πρώτα τον χρόνο εκκίνησης στο βήμα Α"'}>＋ Προσθήκη περιόδου${nx?' — '+quarterLabel(nx[0],nx[1])+' (ν='+(A.periods.length+1)+')':''}</button>
+   <button class="btn gh" onclick="addPeriodsUntilNow()" ${ekkSet?'':'disabled'}
+     title="Δημιουργεί μονομιάς όλες τις περιόδους από ν=1 έως το τρέχον τρίμηνο.">⚡ Όλα τα τρίμηνα έως σήμερα</button>
+   ${!ekkSet?'<span class="hint">Πρώτα το βήμα Α: χωρίς χρόνο εκκίνησης δεν ορίζονται τρίμηνα.</span>':''}
+  </div>
+ </div></div>
+
+ ${list||''}
+
+ ${A.periods.length?`<div class="card"><h3><span class="pill">Σ</span>Συγκεντρωτικός πίνακας δαπάνης αναθεώρησης</h3>
+  ${unalloc||missPer.length
+   ?`<div class="cb" style="padding-bottom:0"><div class="note w" style="margin:0"><b>Πριν κλείσετε το βήμα:</b>
+     ${unalloc?'<br>· '+unalloc+' άρθρα δεν έχουν κατανεμηθεί πλήρως στις περιόδους — το άθροισμα των περιόδων πρέπει να ισούται με την ποσότητα του Α.Π.Ε. (χρησιμοποιήστε το «Κατανομή όλου του υπολοίπου» στην τελευταία περίοδο).':''}
+     ${missPer.map(x=>'<br>· «'+E(x.label)+'»: χωρίς συντελεστή οι κωδικοί '+x.miss.map(E).join(', ')+'.').join('')}</div></div>`
+   :`<div class="cb" style="padding-bottom:0"><div class="note g" style="margin:0"><b>✔ Η αναθεώρηση είναι πλήρης.</b> Όλες οι ποσότητες κατανεμήθηκαν και όλοι οι συντελεστές που χρησιμοποιούνται έχουν οριστεί. Η δαπάνη περνά αυτόματα στην ανακεφαλαίωση του Α.Π.Ε. και στα έγγραφα.</div></div>`}
   <table class="t"><thead><tr><th>Περίοδος</th><th class="c">ν</th><th class="c">σ</th>
    <th class="n">Δαπάνη που αναθεωρείται</th><th class="n">Αναθεωρημένη</th><th class="n">Δαπάνη αναθεώρησης</th></tr></thead><tbody>
-  ${S.anath.periods.map((p,i)=>{const r=periodCalc(p,i);
+  ${A.periods.map((p,i)=>{const r=periodCalc(p,i);
    return`<tr><td>${E(p.label||autoLabel(i))}</td><td class="c">${r.nu}</td><td class="c">${r.sigma.toFixed(2).replace('.',',')}</td>
     <td class="n">${F(R2(r.base+r.mbase))}</td><td class="n">${F(R2(r.rev+r.mrev))}</td><td class="n">${F(r.total)}</td></tr>`;}).join('')}
   <tr class="tot"><td colspan="5">ΣΥΝΟΛΙΚΗ ΔΑΠΑΝΗ ΑΝΑΘΕΩΡΗΣΗΣ</td><td class="n">${F(anathTotal())}</td></tr>
-  </tbody></table></div>`;
+  </tbody></table></div>`
+ :'<div class="card"><div class="empty"><b>Καμία περίοδος ακόμη</b>Ορίστε τον χρόνο εκκίνησης στο βήμα Α και προσθέστε τα τρίμηνα εκτέλεσης στο βήμα Β.</div></div>'}`;
 }
 
 /* ════════════════ 6 · ΕΛΕΓΧΟΣ ════════════════ */
@@ -2473,7 +2570,11 @@ function liveRefresh(){
 }
 /* περίοδοι αναθεώρησης */
 function addPeriod(){S.anath.periods.push({id:uid(),label:'',q:{},coef:{},materials:[]});render();}
-function delPeriod(i){S.anath.periods.splice(i,1);render();}
+function delPeriod(i){
+ const p=S.anath.periods[i];
+ const nQ=p&&p.q?Object.values(p.q).filter(x=>Number(x)>0).length:0;
+ if(nQ&&!confirm('Η περίοδος «'+((p.label||autoLabel(i))||('Περίοδος '+(i+1)))+'» έχει ποσότητες σε '+nQ+' άρθρα.\n\nΔιαγραφή;'))return;
+ S.anath.periods.splice(i,1);render();}
 function setPeriod(i,k,v,num){S.anath.periods[i][k]=num?gr(v):v;refreshPeriod(i);soft();}
 function resetPeriod(i){const p=S.anath.periods[i];p.nuManual=false;p.sigmaManual=false;render();}
 /* Ο κωδικός αναθεώρησης έρχεται από PDF ή XLSX τρίτου. Περνά ως data attribute
@@ -2501,6 +2602,67 @@ function refreshPeriod(i){
 function addMat(i){const p=S.anath.periods[i];p.materials=p.materials||[];p.materials.push({name:'',value:0,coef:1});render();}
 function delMat(i,mi){S.anath.periods[i].materials.splice(mi,1);render();}
 function setMat(i,mi,k,v,num){S.anath.periods[i].materials[mi][k]=num?gr(v):v;refreshPeriod(i);soft();}
+
+/* ── εργονομικοί βοηθοί αναθεώρησης ──
+   Στόχος: ο συντάκτης να μη χρειάζεται να θυμάται τίποτα απέξω — ο χρόνος
+   εκκίνησης προτείνεται από την ημερομηνία διαγωνισμού, τα τρίμηνα
+   γεννιούνται με τη σωστή σειρά και ονομασία, οι συντελεστές αντιγράφονται
+   από την προηγούμενη περίοδο, και οι ποσότητες κατανέμονται με ένα κλικ. */
+function anathSetFromTender(){
+ const m=String(S.project.imDiagonismou||'').match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+ if(!m){ alert('Δεν έχει καταχωριστεί ημερομηνία διαγωνισμού στο βήμα 1.\nΣυμπληρώστε την (π.χ. 12-03-2024) ή ορίστε το τρίμηνο χειροκίνητα.'); return; }
+ let y=+m[3]; if(y<100)y+=2000;
+ S.anath.ekkY=y; S.anath.ekkQ=Math.floor((Math.min(12,Math.max(1,+m[2]))-1)/3);
+ libSave(); render();
+}
+function curQuarter(){ const d=new Date(); return[d.getFullYear(),Math.floor(d.getMonth()/3)]; }
+/* Το τρίμηνο της ΕΠΟΜΕΝΗΣ περιόδου που θα προστεθεί, ώστε το κουμπί της
+   προσθήκης να λέει ρητά ποιο τρίμηνο θα δημιουργήσει. */
+function nextPeriodQuarter(){
+ const y=parseInt(S.anath.ekkY),q=Number(S.anath.ekkQ);
+ if(!y&&y!==0)return null;
+ return addQuarters(y,q,stabilityQuarters()+S.anath.periods.length);
+}
+function addPeriodsUntilNow(){
+ const y=parseInt(S.anath.ekkY);
+ if(!y&&y!==0){ alert('Ορίστε πρώτα τον χρόνο εκκίνησης (βήμα Α).'); return; }
+ const [cy,cq]=curQuarter(); let added=0;
+ while(added<60){
+  const nx=nextPeriodQuarter(); if(!nx)break;
+  if(nx[0]>cy||(nx[0]===cy&&nx[1]>cq))break;
+  S.anath.periods.push({id:uid(),label:'',q:{},coef:{},materials:[]}); added++;
+ }
+ if(!added){ alert('Οι περίοδοι φθάνουν ήδη έως το τρέχον τρίμηνο — δεν υπάρχει άλλο να προστεθεί.'); return; }
+ libSave(); render();
+}
+function copyCoefs(i){
+ if(i<1)return;
+ S.anath.periods[i].coef=Object.assign({},S.anath.periods[i-1].coef||{});
+ libSave(); render();
+}
+function allocRest(i){
+ const p=S.anath.periods[i]; p.q=p.q||{};
+ S.groups.forEach(g=>g.items.forEach(it=>{
+  let other=0; S.anath.periods.forEach((pp,pi)=>{ if(pi!==i) other+=Number((pp.q||{})[it.id])||0; });
+  const rest=R2((Number(it.posotitaApe)||0)-other);
+  p.q[it.id]=rest>0?rest:0;
+ }));
+ libSave(); render();
+}
+function zeroPeriod(i){
+ if(!confirm('Θα μηδενιστούν όλες οι ποσότητες αυτής της περιόδου.\n\nΣυνέχεια;'))return;
+ S.anath.periods[i].q={}; libSave(); render();
+}
+/* Πλοήγηση με το πληκτρολόγιο στη στήλη των ποσοτήτων:
+   Enter ή ↓ = επόμενο άρθρο, ↑ = προηγούμενο. */
+function qtyKey(ev){
+ if(ev.key!=='Enter'&&ev.key!=='ArrowDown'&&ev.key!=='ArrowUp')return;
+ ev.preventDefault();
+ const list=[...document.querySelectorAll('input.q')];
+ const idx=list.indexOf(ev.target); if(idx<0)return;
+ const nx=list[idx+(ev.key==='ArrowUp'?-1:1)];
+ if(nx){ nx.focus(); nx.select(); }
+}
 
 /* ════════════════ ΑΝΑΓΝΩΣΗ ΠΡΟΫΠΟΛΟΓΙΣΜΟΥ ════════════════ */
 const SKIP=/^(Σε μεταφορά|Από μεταφορά|Σελίδα|Σύνολο :|Άθροισμα|Προστίθεται|Απρόβλεπτα\s|Απολογιστικά|ΦΠΑ\s|ΓΕΝΙΚΟ ΣΥΝΟΛΟ|Σύνολο σε|Εγκ\.|Οι μελετητές|ΘΕΩΡΗΘΗΚΕ|Η Προϊσταμένη|Ο Αναπληρωτής|\(Ευρώ\)|Δαπάνη|Μερική|Ολική)/i;

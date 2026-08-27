@@ -95,6 +95,57 @@ const rCr = await page.evaluate(s => { eval(s); const c = calc();
   return { ts: c.tsNeeded, tr: c.transfer }; }, setup(cross));
 ptc('μεταφορά μεταξύ ομάδων: απαιτείται Τ.Σ. πάντοτε', rCr.ts === true && rCr.tr > 0, JSON.stringify(rCr));
 
+/* Αναθεώρηση: καθοδηγητικά βήματα, αυτόματα τρίμηνα, εργονομία πλήκτρων. */
+await page.evaluate(() => {
+  S = blank();
+  S.project.imDiagonismou = '12-03-2024';
+  S.project.proypDimopr = 200000;
+  S.groups = [{ id: 'g1', name: 'Ο1', discount: 0, items: [
+    { id: 'i1', at: '1', perigrafi: 'a', monada: 'm', kodAnath: 'ΟΙΚ 2252', posotita: 100, timi: 10, posotitaApe: 100 },
+    { id: 'i2', at: '2', perigrafi: 'b', monada: 'm', kodAnath: 'ΗΛΜ 44', posotita: 50, timi: 20, posotitaApe: 60 }] }];
+  anathSetFromTender();
+});
+const an1 = await page.evaluate(() => ({ y: S.anath.ekkY, q: S.anath.ekkQ, label: autoLabel(0) }));
+ptc('ο χρόνος εκκίνησης ορίζεται από την ημερομηνία διαγωνισμού',
+  an1.y === 2024 && an1.q === 0, JSON.stringify(an1));
+ptc('η πρώτη αναθεωρητική περίοδος προκύπτει σωστά (ν=1 στο 3ο τρίμηνο 2024)',
+  an1.label === '3ο τρίμηνο 2024', an1.label);
+const an2 = await page.evaluate(() => { addPeriodsUntilNow();
+  const d = new Date(), cy = d.getFullYear(), cq = Math.floor(d.getMonth() / 3);
+  return { n: S.anath.periods.length, exp: (cy - 2024) * 4 + (cq - 2) + 1 }; });
+ptc('«Όλα τα τρίμηνα έως σήμερα» γεννά ακριβώς τις σωστές περιόδους',
+  an2.n === an2.exp && an2.n > 0, JSON.stringify(an2));
+ptc('αντιγραφή συντελεστών από την προηγούμενη περίοδο',
+  await page.evaluate(() => { S.anath.periods[0].coef = { 'ΟΙΚ 2252': 1.05, 'ΗΛΜ 44': 1.02 };
+    copyCoefs(1);
+    return S.anath.periods[1].coef['ΟΙΚ 2252'] === 1.05 && S.anath.periods[1].coef['ΗΛΜ 44'] === 1.02; }));
+const an4 = await page.evaluate(() => {
+  S.anath.periods[0].q = { i1: 40 };
+  allocRest(S.anath.periods.length - 1);
+  let un = 0; S.groups.forEach(g => g.items.forEach(it => {
+    let a = 0; S.anath.periods.forEach(pp => { a += Number((pp.q || {})[it.id]) || 0; });
+    if (Math.abs(a - (Number(it.posotitaApe) || 0)) > 0.001) un++; }));
+  return { un, last: S.anath.periods.at(-1).q }; });
+ptc('κατανομή όλου του υπολοίπου με ένα κλικ',
+  an4.un === 0 && Math.abs(an4.last.i1 - 60) < 0.001 && Math.abs(an4.last.i2 - 60) < 0.001,
+  JSON.stringify(an4));
+const an5 = await page.evaluate(() => {
+  S.anath.periods.at(-1).coef = { 'ΟΙΚ 2252': 1.05, 'ΗΛΜ 44': 1.02 };
+  go('p5');
+  return document.getElementById('content').innerHTML; });
+ptc('πράσινη επιβεβαίωση «Η αναθεώρηση είναι πλήρης»', an5.includes('Η αναθεώρηση είναι πλήρης'));
+ptc('η γραμμή χρόνου δείχνει εκκίνηση, σταθερό τρίμηνο και ν=1',
+  an5.includes('· εκκίνηση') && an5.includes('σταθερές τιμές') && an5.includes('· ν=1'));
+const kb = await page.evaluate(() => {
+  document.querySelectorAll('details').forEach(d => d.open = true);
+  const list = [...document.querySelectorAll('input.q')];
+  if (list.length < 2) return 'λίγα πεδία: ' + list.length;
+  list[0].focus();
+  list[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  return document.activeElement === list[1];
+});
+ptc('Enter στη στήλη ποσοτήτων πηγαίνει στο επόμενο άρθρο', kb === true, String(kb));
+
 /* «Έξυπνη» ανάγνωση προϋπολογισμού: αριθμητική γραμμών, ανάκτηση στηλών,
    αθροίσματα ανά ομάδα, συνέχεια των Α.Τ. */
 const BUD = `ΠΡΟΫΠΟΛΟΓΙΣΜΟΣ ΜΕΛΕΤΗΣ
